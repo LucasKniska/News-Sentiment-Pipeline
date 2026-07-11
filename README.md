@@ -1,6 +1,6 @@
 # News-Sentiment-Pipeline
 
-Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Datadog · CI/CD (GitHub Actions)
+Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Serverless API (Lambda + API Gateway) · Datadog · CI/CD (GitHub Actions)
 
 ---
 
@@ -58,26 +58,42 @@ Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Datadog · CI/C
 
 ---
 
-## Week 7: Harden everything
+## Week 7: API + website
 
-- [ ] Add indexes based on real query patterns from the backtest job (composite index on `(ticker, timestamp)`)
+**Backend API**
+- [ ] SQS queue + DLQ (redrive policy, max receive count) provisioned via Terraform for the ingestion → sentiment-analysis handoff
+- [ ] API Gateway + Lambda serving JSON endpoints over `signals` / `daily_returns` (`GET /backtest`, `GET /tickers/{ticker}`, `GET /signals/recent`)
+- [ ] IAM role + security group for the API Lambda to reach RDS
+- [ ] Query-param filtering (ticker, date range)
+
+**Frontend**
+- [ ] Minimal site (server-rendered pages or static page) hitting the API — replaces the Databricks notebook as the way results get viewed
+- [ ] Deploy via Terraform (S3 + CloudFront if static, or served from the same Lambda)
+
+**Note:** this also creates a second query pattern (on-demand ticker lookups from the website, vs. the nightly Databricks batch scan) — feed both into the indexing work below.
+
+---
+
+## Week 8: Harden everything
+
+- [ ] Add indexes based on real query patterns from both the nightly backtest job and the website's on-demand ticker lookups (composite index on `(ticker, timestamp)`)
 - [ ] `EXPLAIN ANALYZE` before/after — document the improvement
 - [ ] Expand CI/CD: block merge if tests fail, add ingestion idempotency test
-- [ ] Datadog alerting: ingestion lag threshold, LangChain error rate threshold, RDS throttling/connection threshold
+- [ ] Datadog alerting: ingestion lag threshold, LangChain error rate threshold, RDS throttling/connection threshold, API error rate / latency threshold
 - [ ] Load-test or at least sanity-check ingestion under a burst of articles
 
 ---
 
-## Week 8: Polish + writeup
+## Week 9: Polish + writeup
 
 - [ ] Architecture diagram in the README
 - [ ] Document the DynamoDB-vs-Postgres decision as a tradeoff section
 - [ ] Write up backtest results honestly (including if the signal *didn't* beat cost of turnover)
 - [ ] Clean up repo structure, add setup instructions
-- [ ] Record a short demo (screen recording or GIF) of the dashboard + a sample query
+- [ ] Record a short demo (screen recording or GIF) of the website + a sample query
 
 ---
 
 ## Notes
-- If running behind schedule, compress **Week 7** first — it's the busiest week but the least foundational. Don't compress Weeks 1–2; a shaky foundation compounds.
+- If running behind schedule, compress **Week 8** first — it's the busiest week but the least foundational. Don't compress Weeks 1–2; a shaky foundation compounds.
 - Weeks 5–6 are intentionally Databricks-only — built-in slack in case the join/backtest logic takes longer than expected.
