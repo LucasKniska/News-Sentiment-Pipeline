@@ -6,7 +6,20 @@ from finnhub_client import fetch_company_news, get_client
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-DEFAULT_TICKERS = ["AAPL"]
+# Static snapshot of ~100 large-cap US tickers by market cap (roughly S&P 100
+# membership). Not pulled from a live index feed - refresh manually as needed.
+DEFAULT_TICKERS = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK.B", "AVGO", "TSLA", "LLY",
+    "JPM", "V", "UNH", "XOM", "MA", "PG", "COST", "HD", "JNJ", "NFLX",
+    "MRK", "ABBV", "CVX", "BAC", "CRM", "KO", "AMD", "PEP", "WMT", "ADBE",
+    "TMO", "MCD", "CSCO", "ACN", "LIN", "ABT", "WFC", "DHR", "GE", "QCOM",
+    "IBM", "TXN", "CAT", "VZ", "AMGN", "PM", "INTU", "NOW", "ISRG", "SPGI",
+    "CMCSA", "DIS", "AXP", "RTX", "UNP", "NEE", "GS", "T", "LOW", "HON",
+    "BKNG", "AMAT", "PFE", "SYK", "COP", "BLK", "ELV", "TJX", "MS", "SCHW",
+    "PLD", "VRTX", "ETN", "LMT", "C", "GILD", "MDT", "DE", "ADI", "CI",
+    "BSX", "REGN", "ADP", "SBUX", "BA", "MMC", "SO", "PANW", "UPS", "ZTS",
+    "CB", "BX", "MU", "KLAC", "SLB", "DUK", "SNPS", "CDNS", "MO", "EQIX",
+]
 
 
 def lambda_handler(event, context):
