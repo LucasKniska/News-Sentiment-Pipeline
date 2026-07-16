@@ -6,3 +6,6 @@ terraform/*.auto.tfvars
 terraform/crash.log
 .env
 *.env
+__pycache__/
+*.pyc
+.venv/
