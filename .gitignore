@@ -1,0 +1,11 @@
+terraform/.terraform
+terraform/variables.tf
+terraform/terraform.tfstate*
+terraform/*.tfvars
+terraform/*.auto.tfvars
+terraform/crash.log
+.env
+*.env
+__pycache__/
+*.pyc
+.venv/
