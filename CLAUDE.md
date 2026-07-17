@@ -41,7 +41,7 @@ Python dependency management is `uv`-based: a root-level `pyproject.toml` + `uv.
 - `uv add <package>` — add a new Python dependency (updates `pyproject.toml` + `uv.lock` + `.venv` in one step); follow with the `uv export` command below to keep the Lambda's `requirements.txt` in sync.
 - `uv run python lambda/news_ingestion/local_run.py [all|<TICKER>...]` — run the ingestion pipeline locally (reads `lambda/news_ingestion/.env` for `FINNHUB_API_KEY` and the `PG*` DB vars), scraping + upserting into `articles`. No args = `["AAPL"]` only; `all` = the full `DEFAULT_TICKERS` list; or pass explicit tickers.
 - `uv export --no-hashes -o lambda/news_ingestion/requirements.txt` — regenerate the Lambda deployment `requirements.txt` from `uv.lock`; re-run after any dependency change, never hand-edit that file.
-- Applying/updating `db/schema.sql` against the live RDS instance: either `psql -h <rds endpoint> -U <db_username> -d news_sentiment -f db/schema.sql` if `psql` is installed, or run it via `psycopg` (no `psql` client needed — see `db.py`'s `get_connection()` for the connection pattern) — endpoint via `terraform output rds_endpoint`, credentials from `terraform/variables.tf`.
+- `uv run python db/queries/run_query.py <path/to/file.sql>` — run any `.sql` file (schema DDL or ad-hoc queries) against the live RDS instance without needing `psql` installed; prints result rows if the query returns any. Use this for `db/schema.sql` and anything added under `db/queries/` (e.g. `db/queries/urls_by_ticker.sql`).
 - No lint/test commands exist yet.
 
 ## Working conventions for this project
