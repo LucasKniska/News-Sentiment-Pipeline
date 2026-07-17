@@ -7,16 +7,16 @@ Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Serverless API 
 ## Week 1–2: Infra + schema + CI/CD skeleton
 
 **Terraform / infra**
-- [ ] Provision RDS Postgres instance via Terraform
-- [ ] Security groups (only allow ingestion service + your IP)
-- [ ] IAM roles for Lambda/ECS ingestion service
-- [ ] Terraform state stored remotely (S3 backend + lock table)
+- [x] Provision RDS Postgres instance via Terraform
+- [ ] Security groups (only allow ingestion service + your IP) — currently scoped to just the operator's IP; no ingestion service is deployed to AWS yet to also allow
+- [ ] IAM roles for Lambda/ECS ingestion service — no Lambda deployed yet (see Ingestion below)
+- [ ] Terraform state stored remotely (S3 backend + lock table) — still local state
 
 **Schema / migrations**
-- [ ] `articles` table (raw ingested text, `source_id` unique constraint for dedup)
+- [x] `articles` table (`id, headline, text, url, datetime, tickers, ingested_at`) — applied to the live RDS instance via `db/schema.sql`; Finnhub's article `id` doubles as the dedup key
 - [ ] `signals` table (`ticker`, `timestamp`, `event_type`, `sentiment`, `confidence`)
 - [ ] `daily_returns` table (for backtest output later)
-- [ ] Migration tool set up (Alembic or Flyway) — first migration committed
+- [ ] Migration tool set up (Alembic or Flyway) — first migration committed — deferred in favor of a plain SQL script (`db/schema.sql`) run manually for now
 
 **CI/CD**
 - [ ] GitHub Actions: run lint + tests on PR
@@ -24,9 +24,9 @@ Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Serverless API 
 - [ ] CI check that fails if a schema change ships without a migration
 
 **Ingestion**
-- [ ] Pick a news source (Alpha Vantage News Sentiment / Finnhub / NewsAPI)
-- [ ] Basic ingestion Lambda pulling articles into `articles` table
-- [ ] `INSERT ... ON CONFLICT (source_id) DO NOTHING` for idempotent dedup
+- [x] Pick a news source (Alpha Vantage News Sentiment / Finnhub / NewsAPI) — Finnhub
+- [x] Basic ingestion pulling articles into `articles` table — `lambda_handler` in `lambda/news_ingestion/handler.py` fetches, scrapes full article text (`trafilatura`, falling back to Finnhub's `summary`), and upserts into `articles`; runs locally via `local_run.py` for now — not yet deployed as an actual AWS Lambda (no Terraform Lambda resource/IAM role yet)
+- [x] `INSERT ... ON CONFLICT (id) DO UPDATE` merging `tickers` across duplicate fetches for idempotent dedup — chosen over plain `DO NOTHING` since the same article can come back under multiple tickers' fetches
 
 ---
 
