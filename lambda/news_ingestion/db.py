@@ -1,3 +1,6 @@
+import os
+
+import boto3
 import psycopg
 
 # The same article id can come back under multiple tickers (each fetched
@@ -16,6 +19,26 @@ _UPSERT_SQL = """
 
 
 def get_connection() -> psycopg.Connection:
+    # The deployed Lambda authenticates with a short-lived IAM token instead of
+    # PGPASSWORD (its security group allows 0.0.0.0/0, so a static password
+    # alone isn't enough protection) - local dev keeps using PGPASSWORD from
+    # .env via psycopg's normal libpq env var handling.
+    if os.environ.get("PG_IAM_AUTH", "").lower() == "true":
+        host = os.environ["PGHOST"]
+        port = int(os.environ.get("PGPORT", 5432))
+        user = os.environ["PGUSER"]
+        region = os.environ["AWS_REGION"]
+        token = boto3.client("rds", region_name=region).generate_db_auth_token(
+            DBHostname=host, Port=port, DBUsername=user, Region=region
+        )
+        return psycopg.connect(
+            host=host,
+            port=port,
+            dbname=os.environ["PGDATABASE"],
+            user=user,
+            password=token,
+            sslmode="require",
+        )
     return psycopg.connect()
 
 

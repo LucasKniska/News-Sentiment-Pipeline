@@ -20,7 +20,4 @@ if __name__ == "__main__":
         event = {"tickers": ["AAPL"]}
 
     result = lambda_handler(event, None)
-    for ticker, rows in result["articles"].items():
-        for row in rows:
-            print(row)
     print(result["articleCounts"])

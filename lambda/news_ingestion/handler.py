@@ -45,5 +45,4 @@ def lambda_handler(event, context):
     return {
         "statusCode": 200,
         "articleCounts": {ticker: len(articles) for ticker, articles in articles_by_ticker.items()},
-        "articles": articles_by_ticker,
     }
