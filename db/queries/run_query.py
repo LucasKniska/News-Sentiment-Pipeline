@@ -22,6 +22,7 @@ def main():
             if cur.description:
                 for row in cur.fetchall():
                     print(row)
+        conn.commit()
     finally:
         conn.close()
 

@@ -8,14 +8,14 @@ Stack: Postgres (RDS) · Terraform · LangChain · Databricks · Serverless API 
 
 **Terraform / infra**
 - [x] Provision RDS Postgres instance via Terraform
-- [ ] Security groups (only allow ingestion service + your IP) — currently scoped to just the operator's IP; no ingestion service is deployed to AWS yet to also allow
+- [ ] Security groups (only allow ingestion service + your IP) — currently scoped to just the operator's IP
 - [ ] IAM roles for Lambda/ECS ingestion service — no Lambda deployed yet (see Ingestion below)
 - [ ] Terraform state stored remotely (S3 backend + lock table) — still local state
 
 **Schema / migrations**
 - [x] `articles` table (`id, headline, text, url, datetime, tickers, ingested_at`) — applied to the live RDS instance via `db/schema.sql`; Finnhub's article `id` doubles as the dedup key
-- [ ] `signals` table (`ticker`, `timestamp`, `event_type`, `sentiment`, `confidence`)
-- [ ] `daily_returns` table (for backtest output later)
+- [x] `signals` table — one row per sentiment-calculation *run* for a ticker (not per article): `ticker`, `timestamp` (when the run executed), `event_type` (single dominant value), `sentiment` (numeric, so later quintile bucketing is possible), `confidence`, `article_ids` (every article the run aggregated over). Append-only — reruns later the same day insert a new row rather than overwriting, preserving intraday history. Table created via `db/schema.sql`
+- [ ] ~~`daily_returns` table (for backtest output later)~~
 - [ ] Migration tool set up (Alembic or Flyway) — first migration committed — deferred in favor of a plain SQL script (`db/schema.sql`) run manually for now
 
 **CI/CD**
