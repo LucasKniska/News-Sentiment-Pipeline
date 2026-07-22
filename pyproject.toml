@@ -1,8 +1,10 @@
 [project]
 name = "news-sentiment-pipeline"
 version = "0.1.0"
+description = "Financial news ingestion, sentiment extraction, and backtesting pipeline"
 requires-python = ">=3.13"
 dependencies = [
+    "boto3>=1.43.51",
     "finnhub-python>=2.4.29",
     "psycopg[binary]>=3.3.4",
     "python-dotenv>=1.2.2",

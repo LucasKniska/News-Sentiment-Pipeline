@@ -2,6 +2,12 @@
 #    uv export --no-hashes -o lambda/news_ingestion/requirements.txt
 babel==2.18.0
     # via courlan
+boto3==1.43.51
+    # via news-sentiment-pipeline
+botocore==1.43.51
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.6.17
     # via
     #   requests
@@ -21,6 +27,10 @@ htmldate==1.10.0
     # via trafilatura
 idna==3.18
     # via requests
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 justext==3.0.2
     # via trafilatura
 lxml==6.1.1
@@ -37,6 +47,7 @@ psycopg-binary==3.3.4 ; implementation_name != 'pypy'
     # via psycopg
 python-dateutil==2.9.0.post0
     # via
+    #   botocore
     #   dateparser
     #   htmldate
 python-dotenv==1.2.2
@@ -47,6 +58,8 @@ regex==2026.7.10
     # via dateparser
 requests==2.34.2
     # via finnhub-python
+s3transfer==0.19.1
+    # via boto3
 six==1.17.0
     # via python-dateutil
 tld==0.13.2
@@ -61,6 +74,7 @@ tzlocal==5.4.4
     # via dateparser
 urllib3==2.7.0
     # via
+    #   botocore
     #   courlan
     #   htmldate
     #   requests

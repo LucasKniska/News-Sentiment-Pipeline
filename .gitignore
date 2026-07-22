@@ -9,3 +9,5 @@ terraform/crash.log
 __pycache__/
 *.pyc
 .venv/
+lambda/news_ingestion/build/
+lambda/news_ingestion/build.zip
