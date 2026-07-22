@@ -8,7 +8,7 @@ News-Sentiment-Pipeline is a hands-on, self-directed portfolio project. Goal: de
 
 Target stack (per README.md, the plan of record): Postgres (RDS) · Terraform · LangChain · Databricks · Lambda + API Gateway · Datadog · GitHub Actions CI/CD.
 
-README.md contains the full week-by-week (currently Week 1–9) build plan with checkboxes — treat it as the up-to-date roadmap and check it for what's done vs. planned before assuming scope.
+README.md describes the end-state vision (what the finished pipeline does and why); it deliberately does not track current progress. TODO.md contains the full week-by-week (currently Week 1–9) build plan with checkboxes — treat it as the up-to-date roadmap and check it for what's done vs. planned before assuming scope.
 
 ## Current state
 
