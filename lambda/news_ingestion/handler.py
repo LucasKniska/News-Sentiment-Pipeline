@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import date, timedelta
 
 from db import get_connection, upsert_articles
@@ -10,9 +11,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-DEFAULT_TICKERS = [
-    "NVDA", "LMT", "XOM", "AUR"
-]
+DEFAULT_TICKERS = os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR").split(",")
 
 
 def lambda_handler(event, context):

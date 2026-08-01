@@ -13,6 +13,11 @@ locals {
   # db/queries/setup_lambda_iam_user.sql - not var.db_username, which is the
   # broader admin-ish user used for schema changes and laptop access.
   lambda_db_username = "lambda_ingestion"
+
+  # Single source of truth for which tickers this project tracks/signals on.
+  # Passed to every Lambda via TICKERS so ingestion and sentiment extraction
+  # can't drift out of sync.
+  tracked_tickers = ["NVDA", "LMT", "XOM", "AUR"]
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -81,6 +86,7 @@ resource "aws_lambda_function" "news_ingestion" {
       PGDATABASE      = aws_db_instance.postgres.db_name
       PGUSER          = local.lambda_db_username
       PG_IAM_AUTH     = "true"
+      TICKERS         = join(",", local.tracked_tickers)
     }
   }
 
