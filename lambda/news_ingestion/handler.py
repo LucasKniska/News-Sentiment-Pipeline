@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 
 DEFAULT_TICKERS = [
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "SPCX"
+    "NVDA", "LMT", "XOM", "AUR"
 ]
 
 
