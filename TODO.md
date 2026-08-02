@@ -14,7 +14,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 **Schema / migrations**
 - [x] `articles` table (`id, headline, text, url, datetime, tickers, ingested_at`) — applied to the live RDS instance via `db/schema.sql`; Finnhub's article `id` doubles as the dedup key
-- [x] `signals` table — one row per sentiment-calculation *run* for a ticker (not per article): `ticker`, `timestamp` (when the run executed), `event_type` (single dominant value), `sentiment` (numeric, so later quintile bucketing is possible), `confidence`, `article_ids` (every article the run aggregated over). Append-only — reruns later the same day insert a new row rather than overwriting, preserving intraday history. Table created via `db/schema.sql`
+- [x] `signals` table — one row per sentiment-calculation *run* for a ticker (not per article): `ticker`, `timestamp` (when the run executed), `event_type` (single dominant value), `sentiment` (numeric, so later quintile bucketing is possible), `involvement`, `article_ids` (every article the run aggregated over). Append-only — reruns later the same day insert a new row rather than overwriting, preserving intraday history. Table created via `db/schema.sql`
 - [ ] ~~`daily_returns` table (for backtest output later)~~
 - [ ] Migration tool set up (Alembic or Flyway) — first migration committed — deferred in favor of a plain SQL script (`db/schema.sql`) run manually for now
 
@@ -35,7 +35,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 ## Week 3–4: LangChain extraction + first observability
 
 **LangChain**
-- [ ] Structured-output chain (Pydantic schema: ticker, event_type, sentiment, confidence)
+- [ ] Structured-output chain (Pydantic schema: ticker, event_type, sentiment, involvement)
 - [ ] Handle hallucinated/invalid tickers (validate against a known ticker list)
 - [ ] Write extracted signals into `signals` table
 - [ ] Golden-file test set: known articles → expected extraction output

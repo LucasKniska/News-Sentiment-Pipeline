@@ -14,6 +14,6 @@ CREATE TABLE IF NOT EXISTS signals (
     timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
     event_type TEXT,
     sentiment NUMERIC NOT NULL CHECK (sentiment BETWEEN -1 AND 1),
-    confidence NUMERIC NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    involvement NUMERIC NOT NULL CHECK (involvement BETWEEN 0 AND 1),
     article_ids BIGINT[] NOT NULL CHECK (array_length(article_ids, 1) > 0)
 );
