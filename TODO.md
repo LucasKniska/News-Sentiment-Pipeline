@@ -9,14 +9,15 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 **Terraform / infra**
 - [x] Provision RDS Postgres instance via Terraform
 - [ ] Security groups (only allow ingestion service + your IP) — currently scoped to just the operator's IP
-- [ ] IAM roles for Lambda/ECS ingestion service — no Lambda deployed yet (see Ingestion below)
+- [x] IAM roles for Lambda/ECS ingestion service — `aws_iam_role` + inline `rds-db:connect` policy for the ingestion Lambda (`terraform/lambda.tf`)
+- [ ] IAM role + Terraform-deployed Lambda for the `sentiment_analysis` component — still local-only (`local_run.py`)
 - [ ] Terraform state stored remotely (S3 backend + lock table) — still local state
 
 **Schema / migrations**
 - [x] `articles` table (`id, headline, text, url, datetime, tickers, ingested_at`) — applied to the live RDS instance via `db/schema.sql`; Finnhub's article `id` doubles as the dedup key
 - [x] `signals` table — one row per sentiment-calculation *run* for a ticker (not per article): `ticker`, `timestamp` (when the run executed), `event_type` (single dominant value), `sentiment` (numeric, so later quintile bucketing is possible), `involvement`, `article_ids` (every article the run aggregated over). Append-only — reruns later the same day insert a new row rather than overwriting, preserving intraday history. Table created via `db/schema.sql`
 - [ ] ~~`daily_returns` table (for backtest output later)~~
-- [ ] Migration tool set up (Alembic or Flyway) — first migration committed — deferred in favor of a plain SQL script (`db/schema.sql`) run manually for now
+- [ ] ~~Migration tool (Alembic or Flyway)~~ — deliberate non-goal; the plain `db/schema.sql` + `run_query.py` script has handled two table additions fine
 
 **CI/CD**
 - [ ] GitHub Actions: run lint + tests on PR
@@ -28,23 +29,17 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 - [x] Basic ingestion pulling articles into `articles` table — `lambda_handler` in `lambda/news_ingestion/handler.py` fetches, scrapes full article text (`trafilatura`, falling back to Finnhub's `summary`), and upserts into `articles`
 - [x] `INSERT ... ON CONFLICT (id) DO UPDATE` merging `tickers` across duplicate fetches for idempotent dedup — chosen over plain `DO NOTHING` since the same article can come back under multiple tickers' fetches
 - [x] Deploy ingestion as an actual AWS Lambda via Terraform (IAM DB auth to RDS, no VPC attachment)
-- [ ] Schedule/trigger for the Lambda (e.g. EventBridge) — invoked manually for now
+- [x] Schedule/trigger for the Lambda — daily EventBridge cron (`terraform/schedule.tf`)
 
 ---
 
-## Week 3–4: LangChain extraction + first observability
+## Week 3–4: LangChain extraction
 
 **LangChain**
-- [ ] Structured-output chain (Pydantic schema: ticker, event_type, sentiment, involvement)
-- [ ] Handle hallucinated/invalid tickers (validate against a known ticker list)
-- [ ] Write extracted signals into `signals` table
-- [ ] Golden-file test set: known articles → expected extraction output
-
-**Datadog**
-- [ ] Install Datadog agent / integration
-- [ ] Dashboard: ingestion volume, ingestion lag
-- [ ] Dashboard: LangChain error rate / parse failure rate
-- [ ] Dashboard: RDS connection count, query latency
+- [x] Structured-output chain (Pydantic schema: ticker, event_type, sentiment, involvement) — `chain.py` + `combine_chain.py`
+- [x] Handle hallucinated/invalid tickers (validate against a known ticker list) — `schema.py`'s `Literal[TRACKED_TICKERS]`
+- [x] Write extracted signals into `signals` table — `db.py`/`run.py`
+- [x] Golden-file test set: known articles → expected extraction output — `build_eval_set.py` + hand-rated `eval_set.csv` + `run_eval.py`
 
 ---
 
@@ -81,7 +76,6 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 - [ ] Add indexes based on real query patterns from both the nightly backtest job and the website's on-demand ticker lookups (composite index on `(ticker, timestamp)`)
 - [ ] `EXPLAIN ANALYZE` before/after — document the improvement
 - [ ] Expand CI/CD: block merge if tests fail, add ingestion idempotency test
-- [ ] Datadog alerting: ingestion lag threshold, LangChain error rate threshold, RDS throttling/connection threshold, API error rate / latency threshold
 - [ ] Load-test or at least sanity-check ingestion under a burst of articles
 
 ---

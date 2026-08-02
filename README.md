@@ -18,14 +18,13 @@ It's a self-directed exercise in building the kind of system a backend/data/infr
 
 ## Target stack
 
-Postgres (RDS) · Terraform · LangChain · Databricks · Lambda + API Gateway · Datadog · GitHub Actions CI/CD
+Postgres (RDS) · Terraform · LangChain · Databricks · Lambda + API Gateway · GitHub Actions CI/CD
 
 ## Design principles
 
 - **Idempotent ingestion.** The same article can be fetched multiple times (once per ticker it's related to); ingestion is built to merge, not duplicate.
 - **Untrusted LLM output.** Sentiment/ticker/event-type extraction is validated against known-good schemas and a real ticker list before it's trusted enough to write to the database.
 - **Honest backtesting.** The end goal is a real answer, including the possibility that the signal doesn't beat the cost of turnover — that result gets written up too, not hidden.
-- **Observability from the start.** Ingestion lag, extraction error rate, and API latency are meant to be dashboarded and alerted on, not just logged.
 
 ## Current state
 
