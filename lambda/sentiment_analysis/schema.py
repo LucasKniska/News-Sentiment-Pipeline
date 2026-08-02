@@ -37,14 +37,25 @@ class TickerSentiment(BaseModel):
     ticker: Ticker = Field(description="Ticker this sentiment applies to")
     sentiment: float = Field(ge=-1, le=1, description="Sentiment of the article's discussion of this specific ticker, -1 to 1")
     event_type: EventType
-    confidence: float = Field(ge=0, le=1, description="Confidence in this ticker's sentiment/event_type call specifically")
+    involvement: float = Field(
+        ge=0,
+        le=1,
+        description="How central/substantive this ticker's discussion is in the article, 0 to 1. "
+        "0 = tangential or background market color that doesn't focus on this ticker specifically. "
+        "1 = the article is primarily about this ticker. This is not a confidence/certainty score - "
+        "it measures how much of the article is about this ticker, not how sure you are of the call.",
+    )
     # TODO(cut-before-ship): kept only while calibrating against the eval set so a
     # wrong call can be inspected. Not part of the `signals` table - drop this field
-    # once the chain's accuracy/confidence correlation checks out.
+    # once the chain's accuracy/involvement correlation checks out.
     reasoning: str = Field(description="One-sentence justification for the sentiment/event_type call")
 
 
 class ArticleExtraction(BaseModel):
     ticker_sentiments: list[TickerSentiment] = Field(
-        description="One entry per ticker with substantive discussion in the article. Skip tickers only mentioned in passing."
+        description="One entry per tracked ticker discussed in the article, including tickers only "
+        "mentioned as market context - give those low involvement rather than omitting them. Omit a "
+        "ticker only if the article's scraped text itself is not real content (e.g. a paywall notice, "
+        "a JS-blocked error page, or a bare teaser with no actual reporting), even if the ticker's name "
+        "appears in that boilerplate."
     )

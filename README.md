@@ -7,7 +7,7 @@ A data/backend/infra engineering portfolio project: a pipeline that turns financ
 ## What it does
 
 1. **Ingest** financial news for a universe of tickers from a news API.
-2. **Extract** structured signals from each article with LangChain — ticker, event type, sentiment score, confidence — validated against Pydantic schemas so hallucinated tickers or malformed output get caught, not silently stored.
+2. **Extract** structured signals from each article with LangChain — ticker, event type, sentiment score, involvement — validated against Pydantic schemas so hallucinated tickers or malformed output get caught, not silently stored.
 3. **Join** those signals against historical price data in Databricks to compute forward returns (next 1-day, next 5-day) for each article's ticker.
 4. **Backtest** by bucketing articles into sentiment quintiles and comparing average forward return per bucket — the core question the project exists to answer: does sentiment extracted this way actually predict price movement, net of noise?
 5. **Serve** the results — both the nightly backtest output and on-demand per-ticker signal history — through a small API (API Gateway + Lambda) and a minimal website, rather than leaving results stranded in a notebook.
