@@ -59,3 +59,14 @@ class ArticleExtraction(BaseModel):
         "a JS-blocked error page, or a bare teaser with no actual reporting), even if the ticker's name "
         "appears in that boilerplate."
     )
+
+
+class CombinedSignal(BaseModel):
+    """Output of the second (combine) chain - blends this ticker's previous cumulative
+    signal with today's newly-extracted per-article TickerSentiments into one value."""
+
+    sentiment: float = Field(ge=-1, le=1, description="Blended sentiment for this ticker's day so far, -1 to 1")
+    event_type: EventType
+    # TODO(cut-before-ship): kept only while calibrating against the eval set so a
+    # wrong combine call can be inspected. Not part of the `signals` table.
+    reasoning: str | None = Field(default=None, description="One-sentence justification for the blended sentiment/event_type call")
