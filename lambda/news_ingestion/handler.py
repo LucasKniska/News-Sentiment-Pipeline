@@ -11,7 +11,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-DEFAULT_TICKERS = os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR").split(",")
+DEFAULT_TICKERS = os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR,AAPL").split(",")
 
 
 def lambda_handler(event, context):

@@ -17,7 +17,7 @@ locals {
   # Single source of truth for which tickers this project tracks/signals on.
   # Passed to every Lambda via TICKERS so ingestion and sentiment extraction
   # can't drift out of sync.
-  tracked_tickers = ["NVDA", "LMT", "XOM", "AUR"]
+  tracked_tickers = ["NVDA", "LMT", "XOM", "AUR", "AAPL"]
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {

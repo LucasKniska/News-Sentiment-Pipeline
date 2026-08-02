@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 # Sourced from the TICKERS env var (see section 2) so this project's scope stays
 # in sync with lambda/news_ingestion/handler.py's ticker list — no duplication.
-TRACKED_TICKERS = tuple(os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR").split(","))
+TRACKED_TICKERS = tuple(os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR,AAPL").split(","))
 Ticker = Literal[TRACKED_TICKERS]
 
 
