@@ -13,6 +13,11 @@ logger.setLevel(logging.INFO)
 
 DEFAULT_TICKERS = os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR,AAPL").split(",")
 
+# Caps worst-case runtime/cost per ticker per day - a busy ticker/day can return
+# 100+ articles (the AAPL smoke test alone pulled 176), and each one costs a
+# sequential scrape here plus, later, an LLM extraction call downstream.
+MAX_ARTICLES_PER_TICKER_PER_DAY = 50
+
 
 def lambda_handler(event, context):
     event = event or {}
@@ -34,6 +39,10 @@ def lambda_handler(event, context):
                 continue
 
             logger.info("Fetched %d articles for %s (%s to %s)", len(raw_articles), ticker, from_date, to_date)
+            if len(raw_articles) > MAX_ARTICLES_PER_TICKER_PER_DAY:
+                logger.info("Capping %s to %d articles", ticker, MAX_ARTICLES_PER_TICKER_PER_DAY)
+                raw_articles = raw_articles[:MAX_ARTICLES_PER_TICKER_PER_DAY]
+
             rows = [to_article_row(article, fetch_article_text(article["url"])) for article in raw_articles]
             with conn.transaction():
                 upsert_articles(conn, rows)
