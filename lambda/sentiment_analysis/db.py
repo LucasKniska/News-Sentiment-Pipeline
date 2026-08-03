@@ -5,6 +5,7 @@ import boto3
 import psycopg
 
 from models import Article
+from schema import TickerSentiment
 
 # signals.timestamp is when the run executed, not the articles' publish date (see
 # CLAUDE.md) - a run can process a target_date other than today (ingestion itself
@@ -40,6 +41,16 @@ _SELECT_NEW_ARTICLES_SQL = """
 _INSERT_SIGNAL_SQL = """
     INSERT INTO signals (ticker, event_type, sentiment, involvement, article_ids)
     VALUES (%(ticker)s, %(event_type)s, %(sentiment)s, %(involvement)s, %(article_ids)s)
+"""
+
+# ON CONFLICT DO UPDATE (not DO NOTHING) so a re-extraction of the same
+# article/ticker pair - e.g. a rerun - overwrites rather than leaving a stale value.
+_UPSERT_ARTICLE_SENTIMENT_SQL = """
+    INSERT INTO article_sentiment (article_id, ticker, sentiment, involvement)
+    VALUES (%(article_id)s, %(ticker)s, %(sentiment)s, %(involvement)s)
+    ON CONFLICT (article_id, ticker) DO UPDATE SET
+        sentiment = EXCLUDED.sentiment,
+        involvement = EXCLUDED.involvement
 """
 
 
@@ -96,3 +107,17 @@ def insert_signal(conn: psycopg.Connection, ticker: str, event_type: str, sentim
             "involvement": involvement,
             "article_ids": article_ids,
         })
+
+
+def upsert_article_sentiment(conn: psycopg.Connection, article_id: int, ticker_sentiments: list[TickerSentiment]) -> None:
+    """Records the raw per-ticker extraction output for one article - every entry
+    the chain produced, regardless of whether it ended up "new" for that ticker's
+    signals combine this run (see run.py)."""
+    with conn.cursor() as cur:
+        for ts in ticker_sentiments:
+            cur.execute(_UPSERT_ARTICLE_SENTIMENT_SQL, {
+                "article_id": article_id,
+                "ticker": ts.ticker,
+                "sentiment": ts.sentiment,
+                "involvement": ts.involvement,
+            })
