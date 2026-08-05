@@ -31,19 +31,28 @@ class EventType(str, Enum):
     cybersecurity_incident = "cybersecurity_incident"
     commodity_or_input_price_impact = "commodity_or_input_price_impact"
     capital_return = "capital_return"
+    # Catch-all for a broad market/sector-wide move (e.g. an AI-stock selloff, a
+    # rate-driven rally) that touches this ticker through shared exposure rather
+    # than a distinct event specific to it - use only when none of the above fits.
+    market_wide_movement = "market_wide_movement"
+    # A specific competitor's move (product, pricing, market share) pressuring this
+    # ticker - named to match the other event-not-outcome categories rather than
+    # the more generic "competition".
+    competitive_pressure = "competitive_pressure"
 
 
 class TickerSentiment(BaseModel):
-    ticker: Ticker = Field(description="Ticker this sentiment applies to")
+    ticker: Ticker = Field(description="Ticker this sentiment applies to - must be one of the tickers listed in the prompt")
     sentiment: float = Field(ge=-1, le=1, description="Sentiment of the article's discussion of this specific ticker, -1 to 1")
     event_type: EventType
     involvement: float = Field(
         ge=0,
         le=1,
         description="How central/substantive this ticker's discussion is in the article, 0 to 1. "
-        "0 = tangential or background market color that doesn't focus on this ticker specifically. "
-        "1 = the article is primarily about this ticker. This is not a confidence/certainty score - "
-        "it measures how much of the article is about this ticker, not how sure you are of the call.",
+        "0 = tangential - e.g. a broad market-wide piece, or an article centered on a different company "
+        "that this ticker merely shares market/sector exposure with. 1 = the article is primarily about "
+        "this ticker. This is not a confidence/certainty score - it measures how much of the article "
+        "concerns this ticker, not how sure you are of the call. Never a reason to omit the ticker.",
     )
     # TODO(cut-before-ship): kept only while calibrating against the eval set so a
     # wrong call can be inspected. Not part of the `signals` table - drop this field
@@ -53,11 +62,11 @@ class TickerSentiment(BaseModel):
 
 class ArticleExtraction(BaseModel):
     ticker_sentiments: list[TickerSentiment] = Field(
-        description="One entry per tracked ticker discussed in the article, including tickers only "
-        "mentioned as market context - give those low involvement rather than omitting them. Omit a "
-        "ticker only if the article's scraped text itself is not real content (e.g. a paywall notice, "
-        "a JS-blocked error page, or a bare teaser with no actual reporting), even if the ticker's name "
-        "appears in that boilerplate."
+        description="Exactly one entry per ticker listed in the prompt - never fewer, and never an "
+        "entry for a ticker not listed there (chain.py's extract() has already filtered the list down "
+        "to tickers confirmed relevant to this article). The only exception: return an empty list if "
+        "the article's scraped text itself is not real content (e.g. a paywall notice, a JS-blocked "
+        "error page, or a bare teaser with no actual reporting)."
     )
 
 

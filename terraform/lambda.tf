@@ -14,6 +14,10 @@ locals {
   # broader admin-ish user used for schema changes and laptop access.
   lambda_db_username = "lambda_ingestion"
 
+  # Same pattern, dedicated role for sentiment_lambda.tf's Lambda - provisioned
+  # via db/queries/setup_sentiment_lambda_iam_user.sql.
+  sentiment_lambda_db_username = "lambda_sentiment"
+
   # Single source of truth for which tickers this project tracks/signals on.
   # Passed to every Lambda via TICKERS so ingestion and sentiment extraction
   # can't drift out of sync.

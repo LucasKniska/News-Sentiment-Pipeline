@@ -1,6 +1,15 @@
 provider "aws" {
   profile = "terraform-user"
   region  = "us-east-1"
+
+  # Applied to every taggable resource this provider manages - lets
+  # resource_group.tf gather the whole project via a tag query instead of
+  # an explicit, easy-to-forget-to-update resource list.
+  default_tags {
+    tags = {
+      Project = "news-sentiment-pipeline"
+    }
+  }
 }
 
 terraform {

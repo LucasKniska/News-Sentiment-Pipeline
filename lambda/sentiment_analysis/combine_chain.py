@@ -2,7 +2,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from aggregate import average_involvement, merge_article_ids
-from chain import get_llm
+from chain import get_llm, invoke_with_recovery
 from schema import CombinedSignal, TickerSentiment
 
 COMBINE_SYSTEM_PROMPT = """You are combining today's sentiment signal for a single \
@@ -66,11 +66,11 @@ def combine_signal(
     chain: Runnable | None = None,
 ) -> dict:
     chain = chain or build_combine_chain()
-    result: CombinedSignal = chain.invoke({
+    result: CombinedSignal = invoke_with_recovery(chain, {
         "ticker": ticker,
         "previous_summary": _format_previous(previous),
         "new_entries_summary": _format_new_entries(new_entries),
-    })
+    }, CombinedSignal)
     return {
         "sentiment": result.sentiment,
         "event_type": result.event_type.value,
