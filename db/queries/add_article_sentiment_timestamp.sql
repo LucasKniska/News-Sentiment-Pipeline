@@ -1,0 +1,1 @@
+ALTER TABLE article_sentiment ADD COLUMN timestamp TIMESTAMPTZ NOT NULL DEFAULT now();

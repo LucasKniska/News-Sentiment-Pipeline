@@ -28,5 +28,6 @@ CREATE TABLE IF NOT EXISTS article_sentiment (
     ticker TEXT NOT NULL,
     sentiment NUMERIC NOT NULL CHECK (sentiment BETWEEN -1 AND 1),
     involvement NUMERIC NOT NULL CHECK (involvement BETWEEN 0 AND 1),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (article_id, ticker)
 );
