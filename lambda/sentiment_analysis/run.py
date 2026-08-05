@@ -20,9 +20,10 @@ MAX_EXTRACTION_WORKERS = 8
 
 def run(target_date: date | None = None) -> dict:
     # Defaults to yesterday, not today: lambda/news_ingestion/handler.py fetches
-    # from_date = to_date - 1 day, and there's no scheduled trigger yet, so by the
-    # time this runs, yesterday's articles are the complete/stable set while
-    # today's may not exist yet.
+    # from_date = to_date - 1 day, and this runs at 4am ET, 3 hours after
+    # ingestion's 1am ET run (see terraform/schedule.tf), so by the time this
+    # runs, yesterday's articles are the complete/stable set while today's may
+    # not exist yet.
     target_date = target_date or (date.today() - timedelta(days=1))
 
     conn = get_connection()
