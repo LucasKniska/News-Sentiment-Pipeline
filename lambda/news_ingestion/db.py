@@ -17,6 +17,15 @@ _UPSERT_SQL = """
         )
 """
 
+# Reruns for the same ticker/date (e.g. a manual re-invoke) should overwrite,
+# not duplicate - unlike articles.tickers there's nothing to merge, the new
+# close is just the correct value.
+_UPSERT_PRICE_SQL = """
+    INSERT INTO daily_prices (ticker, date, close)
+    VALUES (%(ticker)s, %(date)s, %(close)s)
+    ON CONFLICT (ticker, date) DO UPDATE SET close = EXCLUDED.close
+"""
+
 
 def get_connection() -> psycopg.Connection:
     # The deployed Lambda authenticates with a short-lived IAM token instead of
@@ -47,3 +56,10 @@ def upsert_articles(conn: psycopg.Connection, rows: list[dict]) -> None:
         return
     with conn.cursor() as cur:
         cur.executemany(_UPSERT_SQL, rows)
+
+
+def upsert_daily_price(conn: psycopg.Connection, row: dict | None) -> None:
+    if not row:
+        return
+    with conn.cursor() as cur:
+        cur.execute(_UPSERT_PRICE_SQL, row)

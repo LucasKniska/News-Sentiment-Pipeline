@@ -31,3 +31,15 @@ CREATE TABLE IF NOT EXISTS article_sentiment (
     timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (article_id, ticker)
 );
+
+-- One row per ticker per trading day's close, sourced from Finnhub's /quote
+-- endpoint during news_ingestion's per-ticker run (see handler.py). Kept
+-- separate from the future daily_returns table (Week 5-6 backtest output,
+-- which joins this against signals) - this is just the raw price series.
+CREATE TABLE IF NOT EXISTS daily_prices (
+    ticker TEXT NOT NULL,
+    date DATE NOT NULL,
+    close NUMERIC NOT NULL,
+    ingested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (ticker, date)
+);

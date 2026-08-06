@@ -2,10 +2,10 @@ import logging
 import os
 from datetime import date, timedelta
 
-from db import get_connection, upsert_articles
-from finnhub_client import fetch_company_news, get_client
+from db import get_connection, upsert_articles, upsert_daily_price
+from finnhub_client import fetch_company_news, fetch_quote, get_client
 from scraper import fetch_article_text
-from transform import to_article_row
+from transform import to_article_row, to_price_row
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -43,9 +43,16 @@ def lambda_handler(event, context):
                 logger.info("Capping %s to %d articles", ticker, MAX_ARTICLES_PER_TICKER_PER_DAY)
                 raw_articles = raw_articles[:MAX_ARTICLES_PER_TICKER_PER_DAY]
 
+            try:
+                price_row = to_price_row(ticker, fetch_quote(client, ticker))
+            except Exception:
+                logger.warning("Failed to fetch price for %s", ticker, exc_info=True)
+                price_row = None
+
             rows = [to_article_row(article, fetch_article_text(article["url"])) for article in raw_articles]
             with conn.transaction():
                 upsert_articles(conn, rows)
+                upsert_daily_price(conn, price_row)
             articles_by_ticker[ticker] = rows
     finally:
         conn.close()
