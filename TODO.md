@@ -10,7 +10,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 - [x] Provision RDS Postgres instance via Terraform
 - [ ] Security groups (only allow ingestion service + your IP) — currently scoped to just the operator's IP
 - [x] IAM roles for Lambda/ECS ingestion service — `aws_iam_role` + inline `rds-db:connect` policy for the ingestion Lambda (`terraform/lambda.tf`)
-- [ ] IAM role + Terraform-deployed Lambda for the `sentiment_analysis` component — still local-only (`local_run.py`)
+- [x] IAM role + Terraform-deployed Lambda for the `sentiment_analysis` component, scheduled daily via EventBridge Scheduler alongside ingestion (`terraform/sentiment_lambda.tf`, `terraform/schedule.tf`)
 - [ ] Terraform state stored remotely (S3 backend + lock table) — still local state
 
 **Schema / migrations**
