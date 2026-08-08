@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "trafilatura>=2.1.0",
+    "yfinance>=1.5.2",
 ]
 
 [tool.uv]
