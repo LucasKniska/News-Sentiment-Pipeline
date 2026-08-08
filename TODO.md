@@ -16,7 +16,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 **Schema / migrations**
 - [x] `articles` table (`id, headline, text, url, datetime, tickers, ingested_at`) — applied to the live RDS instance via `db/schema.sql`; Finnhub's article `id` doubles as the dedup key
 - [x] `signals` table — one row per sentiment-calculation *run* for a ticker (not per article): `ticker`, `timestamp` (when the run executed), `event_type` (single dominant value), `sentiment` (numeric, so later quintile bucketing is possible), `involvement`, `article_ids` (every article the run aggregated over). Append-only — reruns later the same day insert a new row rather than overwriting, preserving intraday history. Table created via `db/schema.sql`
-- [ ] ~~`daily_returns` table (for backtest output later)~~
+- [ ] `daily_returns` table (for backtest output later)
 - [ ] ~~Migration tool (Alembic or Flyway)~~ — deliberate non-goal; the plain `db/schema.sql` + `run_query.py` script has handled two table additions fine
 
 **CI/CD**
@@ -46,12 +46,12 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 ## Week 5–6: Databricks join + backtest
 
 **Databricks**
-- [ ] Databricks job reads `signals` + `articles` from Postgres via JDBC
-- [ ] Pull historical price data (yfinance / Polygon) for relevant tickers
+- [x] Databricks job reads `signals` + `articles` from Postgres via JDBC
+- [x] Pull historical price data (yfinance / Polygon) for relevant tickers
 - [ ] Join signals to forward returns (next 1-day, next 5-day)
 - [ ] Backtest: bucket by sentiment quintile, compare average forward return per bucket
 - [ ] Write backtest output to `daily_returns` table
-- [ ] Schedule job to run nightly
+- [x] Schedule job to run nightly
 
 ---
 
