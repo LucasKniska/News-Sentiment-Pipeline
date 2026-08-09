@@ -43,7 +43,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 ---
 
-## Week 5–6: Databricks join + backtest
+## Week 5: Databricks join + backtest
 
 **Databricks**
 - [x] Databricks job reads `signals` + `articles` from Postgres via JDBC
@@ -55,7 +55,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 ---
 
-## Week 7: API + website
+## Week 6: API + website
 
 **Backend API**
 - [ ] SQS queue + DLQ (redrive policy, max receive count) provisioned via Terraform for the ingestion → sentiment-analysis handoff
@@ -71,17 +71,15 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 ---
 
-## Week 8: Harden everything
+## Week 7: Harden everything
 
+**Finishing Up**
 - [ ] Add indexes based on real query patterns from both the nightly backtest job and the website's on-demand ticker lookups (composite index on `(ticker, timestamp)`)
 - [ ] `EXPLAIN ANALYZE` before/after — document the improvement
 - [ ] Expand CI/CD: block merge if tests fail, add ingestion idempotency test
 - [ ] Load-test or at least sanity-check ingestion under a burst of articles
 
----
-
-## Week 9: Polish + writeup
-
+**Final Writeup**
 - [ ] Architecture diagram in the README
 - [ ] Document the DynamoDB-vs-Postgres decision as a tradeoff section
 - [ ] Write up backtest results honestly (including if the signal *didn't* beat cost of turnover)
