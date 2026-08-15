@@ -18,6 +18,11 @@ DEFAULT_TICKERS = os.environ.get("TICKERS", "NVDA,LMT,XOM,AUR,AAPL").split(",")
 # sequential scrape here plus, later, an LLM extraction call downstream.
 MAX_ARTICLES_PER_TICKER_PER_DAY = 50
 
+# Caps total articles stored across all tickers in one invocation - the per-ticker
+# cap alone doesn't bound this (e.g. backfill_run.py calling lambda_handler once
+# per historical day, or TICKERS growing past 5 tickers).
+MAX_ARTICLES_PER_DAY_TOTAL = 250
+
 
 def lambda_handler(event, context):
     event = event or {}
@@ -39,6 +44,7 @@ def lambda_handler(event, context):
     conn = get_connection()
 
     articles_by_ticker = {}
+    total_articles_today = 0
     try:
         for ticker in tickers:
             try:
@@ -51,6 +57,11 @@ def lambda_handler(event, context):
             if len(raw_articles) > MAX_ARTICLES_PER_TICKER_PER_DAY:
                 logger.info("Capping %s to %d articles", ticker, MAX_ARTICLES_PER_TICKER_PER_DAY)
                 raw_articles = raw_articles[:MAX_ARTICLES_PER_TICKER_PER_DAY]
+
+            remaining_budget = max(MAX_ARTICLES_PER_DAY_TOTAL - total_articles_today, 0)
+            if len(raw_articles) > remaining_budget:
+                logger.info("Capping %s to %d articles (daily budget of %d reached)", ticker, remaining_budget, MAX_ARTICLES_PER_DAY_TOTAL)
+                raw_articles = raw_articles[:remaining_budget]
 
             price_row = None
             if not is_backfill:
@@ -65,6 +76,7 @@ def lambda_handler(event, context):
                 upsert_articles(conn, rows)
                 upsert_daily_price(conn, price_row)
             articles_by_ticker[ticker] = rows
+            total_articles_today += len(rows)
     finally:
         conn.close()
 
