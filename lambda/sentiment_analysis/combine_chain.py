@@ -1,8 +1,9 @@
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from aggregate import average_involvement, merge_article_ids
-from chain import get_llm, invoke_with_recovery
+from chain import GROQ_MODELS_BEST_TO_WORST, get_llm, invoke_with_model_fallback, invoke_with_recovery
 from schema import CombinedSignal, TickerSentiment
 
 COMBINE_SYSTEM_PROMPT = """You are combining today's sentiment signal for a single \
@@ -38,9 +39,12 @@ _COMBINE_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 
-def build_combine_chain(llm=None) -> Runnable:
-    llm = llm or get_llm()
+def _build_combine_chain(llm: BaseChatModel) -> Runnable:
     return _COMBINE_PROMPT | llm.with_structured_output(CombinedSignal)
+
+
+def build_combine_chain(llm=None) -> Runnable:
+    return _build_combine_chain(llm or get_llm())
 
 
 def _format_previous(previous: dict | None) -> str:
@@ -64,13 +68,23 @@ def combine_signal(
     new_entries: list[tuple[int, TickerSentiment]],
     ticker: str,
     chain: Runnable | None = None,
+    models: list[str] = GROQ_MODELS_BEST_TO_WORST,
 ) -> dict:
-    chain = chain or build_combine_chain()
-    result: CombinedSignal = invoke_with_recovery(chain, {
+    """chain pins a single fixed model (e.g. for tests). Omit it (the run.py path) to
+    get the same per-call GROQ_MODELS_BEST_TO_WORST fallback extract_with_fallback
+    uses - without it, this call was a single point of failure: it always used the
+    one default model with no fallback, so once that model's daily Groq quota ran
+    out, every combine call failed for the rest of the run even while extraction was
+    still succeeding on other models."""
+    inputs = {
         "ticker": ticker,
         "previous_summary": _format_previous(previous),
         "new_entries_summary": _format_new_entries(new_entries),
-    }, CombinedSignal)
+    }
+    if chain is not None:
+        result: CombinedSignal = invoke_with_recovery(chain, inputs, CombinedSignal)
+    else:
+        result, _ = invoke_with_model_fallback(_build_combine_chain, inputs, CombinedSignal, models)
     return {
         "sentiment": result.sentiment,
         "event_type": result.event_type.value,

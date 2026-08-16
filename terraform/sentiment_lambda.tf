@@ -54,6 +54,7 @@ resource "aws_lambda_function" "sentiment_analysis" {
   environment {
     variables = {
       GROQ_API_KEY      = var.groq_api_key
+      GROQ_API_KEY_2    = var.groq_api_key_2
       ANTHROPIC_API_KEY = var.anthropic_api_key
       PGHOST            = aws_db_instance.postgres.address
       PGPORT            = tostring(aws_db_instance.postgres.port)

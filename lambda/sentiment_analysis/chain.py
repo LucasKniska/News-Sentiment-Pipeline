@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 from typing import Callable
 
@@ -68,10 +69,13 @@ _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 # Only two providers in use - anything not an Anthropic model id ("claude-...") is
 # assumed Groq-hosted, rather than maintaining a name/prefix list that has to be
 # kept in sync with GROQ_MODELS_BEST_TO_WORST below every time Groq's catalog changes.
-def get_llm(model: str = _DEFAULT_MODEL) -> BaseChatModel:
+# api_key overrides ChatGroq's own default env resolution (GROQ_API_KEY) - used by
+# invoke_with_model_fallback to rotate across GROQ_API_KEYS, since each is a
+# separate Groq account/org with its own independent daily token quota (TPD).
+def get_llm(model: str = _DEFAULT_MODEL, api_key: str | None = None) -> BaseChatModel:
     if model.startswith("claude"):
         return ChatAnthropic(model=model, temperature=0)
-    return ChatGroq(model=model, temperature=0)
+    return ChatGroq(model=model, temperature=0, **({"groq_api_key": api_key} if api_key else {}))
 
 
 # Groq's currently-active general-purpose chat models (verified via
@@ -91,6 +95,15 @@ GROQ_MODELS_BEST_TO_WORST = [
     "openai/gpt-oss-20b",
     "llama-3.1-8b-instant",
 ]
+
+# GROQ_API_KEY_2 is a second, separate Groq account - its own org, so its own
+# independent per-model TPD pool (see the 2026-08-16 backfill incident: a single
+# key/org meant one model's daily quota being tapped out blocked every call to that
+# model regardless of how many other models still had headroom). Optional - falls
+# back to a single-key list ([None], meaning "let ChatGroq resolve GROQ_API_KEY
+# itself") when GROQ_API_KEY_2 isn't set, so this is a no-op until a second key is
+# configured.
+GROQ_API_KEYS: list[str | None] = [k for k in (os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")) if k] or [None]
 
 
 def build_chain(llm: BaseChatModel | None = None) -> Runnable:
@@ -145,20 +158,29 @@ def invoke_with_model_fallback(
     inputs: dict,
     output_model: type[BaseModel],
     models: list[str],
+    api_keys: list[str | None] = GROQ_API_KEYS,
 ) -> tuple[BaseModel, str]:
     """Try each model in order (best first) until one produces a usable structured
     result, falling back on ANY failure - rate limits (a model's Groq quota is a
     separate pool per model, so this is often just "try the next one"), schema
     violations invoke_with_recovery couldn't fix, etc. Right now getting a usable
-    structured output at all matters more than which specific model produced it."""
+    structured output at all matters more than which specific model produced it.
+
+    Within each model, also rotates across api_keys (separate Groq accounts, each
+    with its own quota pool for that model) before dropping to the next, weaker
+    model - a model's daily quota being tapped out on one key doesn't mean the same
+    model is unusable, just that key is. Key-minor/model-major ordering so a busy
+    day exhausts the best model's *combined* quota across both keys before ever
+    falling back to a weaker model."""
     last_error: Exception | None = None
     for model in models:
-        try:
-            chain = chain_builder(get_llm(model))
-            return invoke_with_recovery(chain, inputs, output_model), model
-        except Exception as e:
-            logger.warning("Model %s failed: %s", model, e)
-            last_error = e
+        for i, api_key in enumerate(api_keys):
+            try:
+                chain = chain_builder(get_llm(model, api_key))
+                return invoke_with_recovery(chain, inputs, output_model), model
+            except Exception as e:
+                logger.warning("Model %s (key #%d) failed: %s", model, i + 1, e)
+                last_error = e
     raise last_error
 
 

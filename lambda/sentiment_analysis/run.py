@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Callable
 
 from chain import extract_with_fallback
-from combine_chain import build_combine_chain, combine_signal
+from combine_chain import combine_signal
 from db import fetch_latest_signal, fetch_new_articles, get_connection, insert_signal, upsert_article_sentiment
 from models import Article
 from schema import TRACKED_TICKERS, ArticleExtraction, TickerSentiment
@@ -42,7 +42,6 @@ def run(target_date: date | None = None) -> dict:
             for article in fetch_new_articles(conn, ticker, already_ids_by_ticker[ticker], target_date):
                 candidate_articles[article.id] = article
 
-        combine_chain = build_combine_chain()
         new_entries_by_ticker: dict[str, list[tuple[int, TickerSentiment]]] = {ticker: [] for ticker in TRACKED_TICKERS}
 
         # Extraction calls are independent per article (pure network calls to
@@ -78,7 +77,7 @@ def run(target_date: date | None = None) -> dict:
             if not new_entries:
                 continue
             try:
-                combined = combine_signal(previous_by_ticker[ticker], new_entries, ticker, combine_chain)
+                combined = combine_signal(previous_by_ticker[ticker], new_entries, ticker)
             except Exception:
                 logger.warning("Combine failed for ticker %s", ticker, exc_info=True)
                 continue
