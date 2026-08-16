@@ -20,6 +20,15 @@ _CONFIG.set(
     "USER_AGENTS",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 )
+# trafilatura's default DOWNLOAD_TIMEOUT (30s) also sets its retry backoff
+# (backoff_factor = DOWNLOAD_TIMEOUT / 2 in trafilatura's downloads.py), so a
+# single dead/hanging URL can cost 30s+ before even a retry backoff is added.
+# Most real sites we hit respond in under 2s (spot-checked directly) - a
+# handful of slow/unresponsive ones per batch was enough to make a 250-
+# article/day backfill run for hours. Fail those fast instead; a real but
+# slow article is an acceptable loss since scraping is already best-effort
+# (falls back to Finnhub's summary field - see transform.py).
+_CONFIG.set("DEFAULT", "DOWNLOAD_TIMEOUT", "8")
 
 
 def fetch_article_text(url: str) -> str | None:

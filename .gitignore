@@ -13,3 +13,4 @@ lambda/news_ingestion/build/
 lambda/news_ingestion/build.zip
 lambda/sentiment_analysis/build/
 lambda/sentiment_analysis/build.zip
+INCIDENTS.md
