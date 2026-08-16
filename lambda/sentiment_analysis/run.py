@@ -1,6 +1,7 @@
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
+from typing import Callable
 
 from chain import extract_with_fallback
 from combine_chain import build_combine_chain, combine_signal
@@ -94,4 +95,75 @@ def run(target_date: date | None = None) -> dict:
     finally:
         conn.close()
 
-    return signal_counts
+    return {
+        "signal_counts": signal_counts,
+        "candidates": len(candidate_articles),
+        "extracted": len(extraction_results),
+    }
+
+
+def _has_remaining_work(conn, target_date: date) -> bool:
+    for ticker in TRACKED_TICKERS:
+        previous = fetch_latest_signal(conn, ticker, target_date)
+        already_ids = previous["article_ids"] if previous else []
+        if fetch_new_articles(conn, ticker, already_ids, target_date):
+            return True
+    return False
+
+
+# Groq's account-wide daily token quota (TPD) is the actual bottleneck for
+# backfilling old dates - see RESUME_SENTIMENT_BACKFILL.md. This lets a fixed
+# EventBridge schedule (static backfill_range input, see handler.py) make a
+# bit more progress every morning without any human watching console output
+# for 429s: each invocation works forward through the range, skipping dates
+# that already have no remaining work (cheap DB reads only, no LLM calls),
+# and stops itself once a date shows a partial extraction failure - the best
+# available signal (short of parsing Groq's error text, which is brittle)
+# that the day's quota is probably exhausted, so grinding through the rest of
+# the range would just be doomed API calls. The next morning's invocation
+# naturally retries whatever's still incomplete, via the same DB-derived
+# "what's new" check run() already uses for same-day resumability.
+def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[], int] | None = None) -> dict:
+    # Reserves enough runway for one more date's worst-case duration (matches
+    # the live daily schedule's own 900s/15min Lambda timeout) rather than
+    # letting Lambda kill an invocation mid-call.
+    SAFETY_MARGIN_MS = 600_000
+    MAX_ATTEMPTS_PER_DATE = 2
+
+    conn = get_connection()
+    try:
+        cursor_date = start_date
+        results: dict[str, dict] = {}
+        while cursor_date <= end_date:
+            if get_remaining_ms is not None and get_remaining_ms() < SAFETY_MARGIN_MS:
+                return {"status": "stopped_low_on_time", "results": results}
+
+            if not _has_remaining_work(conn, cursor_date):
+                cursor_date += timedelta(days=1)
+                continue
+
+            target_date = cursor_date
+            attempts = 0
+            while True:
+                attempts += 1
+                stats = run(target_date)
+                results[target_date.isoformat()] = stats
+
+                if stats["extracted"] < stats["candidates"]:
+                    return {"status": "stopped_quota_exhausted", "results": results}
+
+                if not _has_remaining_work(conn, target_date):
+                    break
+                if attempts >= MAX_ATTEMPTS_PER_DATE:
+                    logger.warning(
+                        "Date %s still has remaining work after %d attempts (likely a persistent combine/insert "
+                        "failure) - moving on rather than retrying indefinitely",
+                        target_date, attempts,
+                    )
+                    break
+
+            cursor_date = target_date + timedelta(days=1)
+
+        return {"status": "complete", "results": results}
+    finally:
+        conn.close()

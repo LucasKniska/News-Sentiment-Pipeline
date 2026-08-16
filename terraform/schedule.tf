@@ -100,3 +100,46 @@ resource "aws_scheduler_schedule" "sentiment_analysis_daily" {
     }
   }
 }
+
+# TEMPORARY - DELETE THIS RESOURCE once RESUME_SENTIMENT_BACKFILL.md's
+# 2026-07-07 through 2026-07-31 range shows full coverage (check via the
+# coverage query in that file), then remove this block and `terraform apply`.
+#
+# Groq's account-wide daily token quota (TPD) means the July sentiment
+# backfill can only make a bit more progress each day, once the quota resets
+# - see RESUME_SENTIMENT_BACKFILL.md. Rather than a human watching console
+# output and re-running local_run.py by hand every morning, this invokes the
+# same deployed sentiment_analysis Lambda with a fixed backfill_range event;
+# run_backfill() (lambda/sentiment_analysis/run.py) figures out which dates
+# in the range still need work and stops itself once it hits the day's quota
+# wall, so this is safe to just leave running unattended.
+#
+# 5am ET - one hour after the live sentiment_analysis_daily run above, so the
+# production daily job always gets first claim on the shared Groq quota. That
+# hour of separation also makes the two schedules' Lambda invocations mutually
+# exclusive in time, since each is capped at the 900s timeout below.
+resource "aws_scheduler_schedule" "sentiment_backfill_daily" {
+  name = "news-sentiment-backfill-daily"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  schedule_expression          = "cron(0 5 * * ? *)"
+  schedule_expression_timezone = "America/New_York"
+
+  target {
+    arn      = aws_lambda_function.sentiment_analysis.arn
+    role_arn = aws_iam_role.scheduler_invoke_lambda.arn
+
+    input = jsonencode({
+      backfill_range = ["2026-07-07", "2026-07-31"]
+    })
+
+    # Same reasoning as sentiment_analysis_daily above - signals has no
+    # unique business key, so an overlapping retry could double-insert.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
