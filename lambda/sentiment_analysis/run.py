@@ -3,11 +3,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, timedelta
 from typing import Callable
 
-from chain import extract_with_fallback
+from chain import extract_with_fallback, relevant_tickers
 from combine_chain import combine_signal
-from db import fetch_latest_signal, fetch_new_articles, get_connection, insert_signal, upsert_article_sentiment
+from db import (
+    fetch_latest_signal,
+    fetch_new_articles,
+    fetch_uncombined_sentiment,
+    get_connection,
+    insert_signal,
+    mark_attempted,
+    upsert_article_sentiment,
+)
 from models import Article
-from schema import TRACKED_TICKERS, ArticleExtraction, TickerSentiment
+from schema import TRACKED_TICKERS, ArticleExtraction
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -30,19 +38,15 @@ def run(target_date: date | None = None) -> dict:
     conn = get_connection()
     try:
         previous_by_ticker = {ticker: fetch_latest_signal(conn, ticker, target_date) for ticker in TRACKED_TICKERS}
-        already_ids_by_ticker = {
-            ticker: (previous_by_ticker[ticker]["article_ids"] if previous_by_ticker[ticker] else [])
-            for ticker in TRACKED_TICKERS
-        }
 
         # Union of articles new for at least one tracked ticker - each gets exactly
         # one LLM call this run regardless of how many tracked tickers it mentions.
+        # "New" means no article_extraction_attempts row yet for that (article,
+        # ticker) pair - see db.py's _SELECT_NEW_ARTICLES_SQL.
         candidate_articles: dict[int, Article] = {}
         for ticker in TRACKED_TICKERS:
-            for article in fetch_new_articles(conn, ticker, already_ids_by_ticker[ticker], target_date):
+            for article in fetch_new_articles(conn, ticker, target_date):
                 candidate_articles[article.id] = article
-
-        new_entries_by_ticker: dict[str, list[tuple[int, TickerSentiment]]] = {ticker: [] for ticker in TRACKED_TICKERS}
 
         # Extraction calls are independent per article (pure network calls to
         # Groq/Anthropic, no shared state) so they run concurrently; the DB
@@ -63,21 +67,31 @@ def run(target_date: date | None = None) -> dict:
                 extraction_results[article.id] = result
 
         for article_id, result in extraction_results.items():
+            # Marks every ticker the chain was actually asked about as attempted -
+            # including ones the model correctly left out (paywalled/blocked text,
+            # or an omitted ticker) - so fetch_new_articles never re-offers this
+            # pair. Only for articles that got a response at all: one that failed
+            # on every fallback model isn't in extraction_results, so it stays
+            # unattempted and eligible for retry next run.
+            tickers_asked = relevant_tickers(candidate_articles[article_id])
+            if tickers_asked:
+                mark_attempted(conn, article_id, tickers_asked)
             if result.ticker_sentiments:
                 upsert_article_sentiment(conn, article_id, result.ticker_sentiments)
-            for ts in result.ticker_sentiments:
-                # A ticker on this article may already be counted (e.g. it was new
-                # for a different tracked ticker mentioned in the same article, but
-                # this one was processed in an earlier run) - skip re-counting it.
-                if article_id not in already_ids_by_ticker[ts.ticker]:
-                    new_entries_by_ticker[ts.ticker].append((article_id, ts))
 
+        # Reads combine input back from article_sentiment rather than from this
+        # run's in-memory extraction_results - self-healing, since it also picks
+        # up anything extracted-but-never-combined from an earlier run (e.g. a
+        # prior combine_signal failure) rather than only what was just extracted.
         signal_counts = {}
-        for ticker, new_entries in new_entries_by_ticker.items():
+        for ticker in TRACKED_TICKERS:
+            previous = previous_by_ticker[ticker]
+            already_ids = previous["article_ids"] if previous else []
+            new_entries = fetch_uncombined_sentiment(conn, ticker, target_date, already_ids)
             if not new_entries:
                 continue
             try:
-                combined = combine_signal(previous_by_ticker[ticker], new_entries, ticker)
+                combined = combine_signal(previous, new_entries, ticker)
             except Exception:
                 logger.warning("Combine failed for ticker %s", ticker, exc_info=True)
                 continue
@@ -102,12 +116,60 @@ def run(target_date: date | None = None) -> dict:
 
 
 def _has_remaining_work(conn, target_date: date) -> bool:
+    # Two distinct kinds of remaining work, checked separately: articles never
+    # attempted at all, and articles already extracted but not yet folded into a
+    # signal (e.g. a prior combine_signal failure). Only checking the former was
+    # the original bug - a date could sit forever in the second state, since
+    # nothing here would ever notice.
     for ticker in TRACKED_TICKERS:
+        if fetch_new_articles(conn, ticker, target_date):
+            return True
         previous = fetch_latest_signal(conn, ticker, target_date)
         already_ids = previous["article_ids"] if previous else []
-        if fetch_new_articles(conn, ticker, already_ids, target_date):
+        if fetch_uncombined_sentiment(conn, ticker, target_date, already_ids):
             return True
     return False
+
+
+# Runs the same attempt-and-retry loop run_backfill uses for one date: up to
+# max_attempts calls to run(), stopping early on a quota-exhaustion signal or a
+# low-time signal. Returns a terminal status string to propagate immediately
+# ("stopped_quota_exhausted"/"stopped_low_on_time"), or None once the date has
+# no remaining work (resolved) or has been retried max_attempts times without
+# resolving (moving on - see the module-level note above _has_remaining_work
+# on why a date can legitimately never fully resolve).
+def _fill_date(
+    conn,
+    target_date: date,
+    max_attempts: int,
+    get_remaining_ms: Callable[[], int] | None,
+    safety_margin_ms: int,
+    results: dict[str, dict],
+) -> str | None:
+    if not _has_remaining_work(conn, target_date):
+        return None
+
+    attempts = 0
+    while True:
+        if get_remaining_ms is not None and get_remaining_ms() < safety_margin_ms:
+            return "stopped_low_on_time"
+
+        attempts += 1
+        stats = run(target_date)
+        results[target_date.isoformat()] = stats
+
+        if stats["extracted"] < stats["candidates"]:
+            return "stopped_quota_exhausted"
+
+        if not _has_remaining_work(conn, target_date):
+            return None
+        if attempts >= max_attempts:
+            logger.warning(
+                "Date %s still has remaining work after %d attempts (likely a persistent combine/insert "
+                "failure) - moving on rather than retrying indefinitely",
+                target_date, attempts,
+            )
+            return None
 
 
 # Groq's account-wide daily token quota (TPD) is the actual bottleneck for
@@ -122,6 +184,16 @@ def _has_remaining_work(conn, target_date: date) -> bool:
 # the range would just be doomed API calls. The next morning's invocation
 # naturally retries whatever's still incomplete, via the same DB-derived
 # "what's new" check run() already uses for same-day resumability.
+#
+# Before touching the historical range at all, this first runs the same
+# attempt loop against the most recent day - the same target_date the live
+# 4am ET schedule processes (see run()'s own default). That daily run has no
+# retry of its own: if Groq's quota was already tight by 4am, yesterday can be
+# left partially processed with nothing to catch it up except this 5am
+# invocation. A fresh signal matters more than an old backfill date, so this
+# tops up yesterday first and only spends whatever time/quota is left on the
+# historical range - on a morning where yesterday alone exhausts the quota,
+# the range gets zero progress that day, which is the correct tradeoff.
 def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[], int] | None = None) -> dict:
     # Reserves enough runway for one more date's worst-case duration (matches
     # the live daily schedule's own 900s/15min Lambda timeout) rather than
@@ -131,37 +203,28 @@ def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[]
 
     conn = get_connection()
     try:
-        cursor_date = start_date
         results: dict[str, dict] = {}
+
+        most_recent_date = date.today() - timedelta(days=1)
+        status = _fill_date(conn, most_recent_date, MAX_ATTEMPTS_PER_DATE, get_remaining_ms, SAFETY_MARGIN_MS, results)
+        if status is not None:
+            return {"status": status, "results": results}
+
+        cursor_date = start_date
         while cursor_date <= end_date:
             if get_remaining_ms is not None and get_remaining_ms() < SAFETY_MARGIN_MS:
                 return {"status": "stopped_low_on_time", "results": results}
 
-            if not _has_remaining_work(conn, cursor_date):
+            # Already handled above if the range happens to include today's target.
+            if cursor_date == most_recent_date:
                 cursor_date += timedelta(days=1)
                 continue
 
-            target_date = cursor_date
-            attempts = 0
-            while True:
-                attempts += 1
-                stats = run(target_date)
-                results[target_date.isoformat()] = stats
+            status = _fill_date(conn, cursor_date, MAX_ATTEMPTS_PER_DATE, get_remaining_ms, SAFETY_MARGIN_MS, results)
+            if status is not None:
+                return {"status": status, "results": results}
 
-                if stats["extracted"] < stats["candidates"]:
-                    return {"status": "stopped_quota_exhausted", "results": results}
-
-                if not _has_remaining_work(conn, target_date):
-                    break
-                if attempts >= MAX_ATTEMPTS_PER_DATE:
-                    logger.warning(
-                        "Date %s still has remaining work after %d attempts (likely a persistent combine/insert "
-                        "failure) - moving on rather than retrying indefinitely",
-                        target_date, attempts,
-                    )
-                    break
-
-            cursor_date = target_date + timedelta(days=1)
+            cursor_date += timedelta(days=1)
 
         return {"status": "complete", "results": results}
     finally:

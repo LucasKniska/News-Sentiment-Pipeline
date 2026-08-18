@@ -64,7 +64,7 @@ _PROMPT = ChatPromptTemplate.from_messages([
 # Groq (free/cheap) default while iterating on the pipeline - swap back to an
 # Anthropic model id (see run_eval.py) once the extraction is validated and the
 # cost of running it for real is worth paying.
-_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+_DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 # Only two providers in use - anything not an Anthropic model id ("claude-...") is
 # assumed Groq-hosted, rather than maintaining a name/prefix list that has to be
@@ -88,12 +88,16 @@ def get_llm(model: str = _DEFAULT_MODEL, api_key: str | None = None) -> BaseChat
 # with their own built-in tool use, which fights with our structured-output tool
 # schema). Ranked best-to-worst by rough capability tier (mostly parameter count) -
 # Groq doesn't publish a benchmarked ranking, so this is a best-effort ordering.
+# `llama-3.3-70b-versatile` and `llama-3.1-8b-instant` were both dropped
+# 2026-08-17 after `models.list()` showed Groq removed them from the catalog
+# entirely (calls to either now 404 with "does not exist or you do not have
+# access to it") - not a rename, no direct Llama replacement is currently
+# active. Every call had been trying both dead rungs before falling through,
+# which was pure wasted latency on every single extraction/combine call.
 GROQ_MODELS_BEST_TO_WORST = [
     "openai/gpt-oss-120b",
-    "llama-3.3-70b-versatile",
     "qwen/qwen3.6-27b",
     "openai/gpt-oss-20b",
-    "llama-3.1-8b-instant",
 ]
 
 # GROQ_API_KEY_2 is a second, separate Groq account - its own org, so its own
@@ -104,6 +108,14 @@ GROQ_MODELS_BEST_TO_WORST = [
 # itself") when GROQ_API_KEY_2 isn't set, so this is a no-op until a second key is
 # configured.
 GROQ_API_KEYS: list[str | None] = [k for k in (os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")) if k] or [None]
+
+
+def relevant_tickers(article: Article) -> list[str]:
+    """Tickers this article is both linked to (articles.tickers) and tracked -
+    the only ones we ever ask the model about. Shared by extract()/
+    extract_with_fallback() below and by run.py, which needs the same set to
+    know which tickers to mark as attempted after extraction."""
+    return [t for t in article.tickers if t in TRACKED_TICKERS]
 
 
 def build_chain(llm: BaseChatModel | None = None) -> Runnable:
@@ -141,13 +153,13 @@ def extract(article: Article, chain: Runnable | None = None) -> ArticleExtractio
     # see handler.py's merge-on-conflict logic) rather than every TRACKED_TICKERS
     # entry - this is what lets the prompt forbid placeholder/omitted entries above,
     # and it saves a call entirely when nothing tracked applies.
-    relevant_tickers = [t for t in article.tickers if t in TRACKED_TICKERS]
-    if not relevant_tickers:
+    tickers = relevant_tickers(article)
+    if not tickers:
         return ArticleExtraction(ticker_sentiments=[])
 
     chain = chain or build_chain()
     return invoke_with_recovery(chain, {
-        "tickers": ", ".join(relevant_tickers),
+        "tickers": ", ".join(tickers),
         "headline": article.headline,
         "text": article.text,
     }, ArticleExtraction)
@@ -191,12 +203,12 @@ def extract_with_fallback(
     """Same ticker-filtering as extract(), but tries GROQ_MODELS_BEST_TO_WORST in
     order instead of a single fixed model. Returns (result, model_that_succeeded) -
     the model name is None only for the no-LLM-call empty-result short-circuit."""
-    relevant_tickers = [t for t in article.tickers if t in TRACKED_TICKERS]
-    if not relevant_tickers:
+    tickers = relevant_tickers(article)
+    if not tickers:
         return ArticleExtraction(ticker_sentiments=[]), None
 
     inputs = {
-        "tickers": ", ".join(relevant_tickers),
+        "tickers": ", ".join(tickers),
         "headline": article.headline,
         "text": article.text,
     }
