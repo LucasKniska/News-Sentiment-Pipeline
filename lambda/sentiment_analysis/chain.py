@@ -2,6 +2,8 @@ import json
 import logging
 import os
 import re
+import threading
+import time
 from typing import Callable
 
 import groq
@@ -109,6 +111,46 @@ GROQ_MODELS_BEST_TO_WORST = [
 # configured.
 GROQ_API_KEYS: list[str | None] = [k for k in (os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")) if k] or [None]
 
+# Groq's 429s come in two flavors that behave very differently: TPD (tokens per
+# day) won't clear for hours, while TPM (tokens per minute) clears in seconds.
+# Treating them the same wastes calls - retrying a TPD-exhausted (model, key)
+# combo for every subsequent article is a guaranteed-failing network round trip,
+# while giving up on a TPM hit immediately abandons a model that's about to be
+# usable again. Groq doesn't expose a structured Retry-After for this (the
+# per-minute reset header exists, but there's no equivalent daily one), so both
+# the flavor and the wait time are parsed out of the 429 message body itself.
+_TPD_MARKER = "tokens per day (TPD)"
+_RETRY_AFTER_RE = re.compile(r"try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)(ms|s)\b")
+
+
+def _is_daily_rate_limit(error: Exception) -> bool:
+    return _TPD_MARKER in str(error)
+
+
+def _parse_retry_after(error: Exception, default: float = 1.0) -> float:
+    match = _RETRY_AFTER_RE.search(str(error))
+    if not match:
+        return default
+    hours, minutes, value, unit = match.groups()
+    seconds = float(value) / 1000 if unit == "ms" else float(value)
+    return seconds + int(minutes or 0) * 60 + int(hours or 0) * 3600
+
+
+# (model, api_key) pairs already confirmed TPD-exhausted, shared across every
+# extract_with_fallback/combine_signal call in this process - once a combo is known
+# dead for the day, every subsequent article skips it outright instead of
+# rediscovering the same 429 via a wasted network call. Reset only by a fresh
+# process (new Lambda container / new local run), which is fine since Groq's TPD
+# window is daily and every run here is bounded to at most one day anyway.
+_exhausted_combos: set[tuple[str, str | None]] = set()
+_exhausted_combos_lock = threading.Lock()
+
+# One retry for a TPM hit (capped, since it's meant to clear in seconds - a raw
+# Retry-After could in principle be long if many callers are contending for the
+# same 8000 TPM pool at once, see the 2026-08-18 backfill investigation).
+_TPM_MAX_RETRIES = 1
+_TPM_RETRY_CAP_SECONDS = 15.0
+
 
 def relevant_tickers(article: Article) -> list[str]:
     """Tickers this article is both linked to (articles.tickers) and tracked -
@@ -183,17 +225,49 @@ def invoke_with_model_fallback(
     model - a model's daily quota being tapped out on one key doesn't mean the same
     model is unusable, just that key is. Key-minor/model-major ordering so a busy
     day exhausts the best model's *combined* quota across both keys before ever
-    falling back to a weaker model."""
+    falling back to a weaker model.
+
+    A 429 gets special handling instead of falling straight through like any other
+    failure (see _is_daily_rate_limit above): a TPD hit marks the (model, key) combo
+    exhausted for the rest of this process, so no later article ever retries a
+    combo already known dead; a TPM hit is retried in place (briefly) since it's
+    expected to clear on its own within seconds."""
     last_error: Exception | None = None
     for model in models:
         for i, api_key in enumerate(api_keys):
-            try:
-                chain = chain_builder(get_llm(model, api_key))
-                return invoke_with_recovery(chain, inputs, output_model), model
-            except Exception as e:
-                logger.warning("Model %s (key #%d) failed: %s", model, i + 1, e)
-                last_error = e
-    raise last_error
+            combo = (model, api_key)
+            with _exhausted_combos_lock:
+                if combo in _exhausted_combos:
+                    continue
+
+            retries_left = _TPM_MAX_RETRIES
+            while True:
+                try:
+                    chain = chain_builder(get_llm(model, api_key))
+                    return invoke_with_recovery(chain, inputs, output_model), model
+                except groq.RateLimitError as e:
+                    last_error = e
+                    if _is_daily_rate_limit(e):
+                        with _exhausted_combos_lock:
+                            _exhausted_combos.add(combo)
+                        logger.warning("Model %s (key #%d) hit its daily quota - skipping for the rest of this run: %s", model, i + 1, e)
+                        break
+                    if retries_left > 0:
+                        wait = min(_parse_retry_after(e), _TPM_RETRY_CAP_SECONDS)
+                        logger.warning("Model %s (key #%d) hit a per-minute limit - retrying in %.1fs: %s", model, i + 1, wait, e)
+                        time.sleep(wait)
+                        retries_left -= 1
+                        continue
+                    logger.warning("Model %s (key #%d) failed: %s", model, i + 1, e)
+                    break
+                except Exception as e:
+                    logger.warning("Model %s (key #%d) failed: %s", model, i + 1, e)
+                    last_error = e
+                    break
+    # last_error is still None if every (model, key) combo was already in
+    # _exhausted_combos before this call even tried one - i.e. every option is
+    # known TPD-dead for the day, not just this article's.
+    raise last_error or RuntimeError("All models/keys already marked daily-quota-exhausted for this run")
 
 
 def extract_with_fallback(
