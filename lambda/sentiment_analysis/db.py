@@ -36,6 +36,18 @@ _SELECT_LATEST_SIGNAL_SQL = """
 # original approach) meant an empty-result extraction left no record anywhere,
 # so the same already-settled article kept coming back as "new" forever - see
 # CLAUDE.md's 2026-08-17 note.
+#
+# Also excludes an unattempted article if a signal for this ticker/day already
+# exists AND was produced after this article was ingested - i.e. that signal's
+# run already had the chance to see this article and still has no attempts row
+# for it, meaning every fallback failed. There's no point spending quota
+# rediscovering the same failure once the day is already represented by a
+# signal (2026-08-18: found 1,159 such stragglers account-wide burning ~86% of
+# a backfill run's quota on already-settled dates). The ingested_at comparison
+# (rather than excluding on "any signal exists at all") is what keeps this from
+# breaking the live daily run's intraday behavior: a genuinely new article that
+# arrives AFTER the day's first signal must still be tried so its ticker's
+# signal can be appended to, not just the article's first-ever candidacy.
 _SELECT_NEW_ARTICLES_SQL = """
     SELECT a.id, a.headline, a.text, a.url, a.datetime, a.tickers, a.ingested_at
     FROM articles a
@@ -46,6 +58,14 @@ _SELECT_NEW_ARTICLES_SQL = """
       AND NOT EXISTS (
         SELECT 1 FROM article_extraction_attempts x
         WHERE x.article_id = a.id AND x.ticker = %(ticker)s
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM signals s
+        WHERE s.ticker = %(ticker)s
+          AND s.timestamp > a.ingested_at
+          AND EXISTS (
+            SELECT 1 FROM articles a2 WHERE a2.id = ANY(s.article_ids) AND a2.datetime::date = %(target_date)s
+          )
       )
 """
 
