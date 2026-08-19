@@ -4,6 +4,8 @@ terraform/terraform.tfstate*
 terraform/*.tfvars
 terraform/*.auto.tfvars
 terraform/crash.log
+terraform/tfplan
+terraform/payload.json
 .env
 *.env
 __pycache__/
