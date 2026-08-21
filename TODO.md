@@ -43,7 +43,7 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 ---
 
-## Week 5–6: Databricks join + backtest
+## Week 5: Databricks join + backtest
 
 **Databricks**
 - [x] Databricks job reads `signals` + `articles` from Postgres via JDBC
@@ -55,33 +55,33 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 
 ---
 
-## Week 7: API + website
+## Week 6: API + website
 
 **Backend API**
 - [ ] SQS queue + DLQ (redrive policy, max receive count) provisioned via Terraform for the ingestion → sentiment-analysis handoff
-- [ ] API Gateway + Lambda serving JSON endpoints over `signals` / `daily_returns` (`GET /backtest`, `GET /tickers/{ticker}`, `GET /signals/recent`)
-- [ ] IAM role + security group for the API Lambda to reach RDS
-- [ ] Query-param filtering (ticker, date range)
+- [x] API Gateway + Lambda serving JSON over `signals` — `GET /signals/recent` deployed via `terraform/api.tf` (2026-08-21). `GET /tickers/{ticker}` dropped as redundant now that `/signals/recent?ticker=` covers it; `GET /backtest` deferred — depends on Week 5's `daily_returns` work, and may end up unnecessary now that the plan is to embed the real Databricks dashboard rather than rebuild backtest charts from raw data.
+- [x] IAM role for the API Lambda to reach RDS (IAM DB auth via the `api_read` Postgres role, same pattern as the other two Lambdas — no VPC/security-group attachment needed, matching how `news_ingestion`/`sentiment_analysis` reach RDS)
+- [x] Query-param filtering — `ticker` and `limit` on `/signals/recent`; no date-range filter yet
+- [x] Rate limiting — API Gateway stage-level throttle (`throttling_rate_limit = 4`, `throttling_burst_limit = 8` req/sec) caps worst-case cost around $12-13/month even under sustained abuse; `reserved_concurrent_executions` was attempted but reverted since this AWS account's total Lambda concurrency limit is only 10
 
 **Frontend**
-- [ ] Minimal site (server-rendered pages or static page) hitting the API — replaces the Databricks notebook as the way results get viewed
-- [ ] Deploy via Terraform (S3 + CloudFront if static, or served from the same Lambda)
+- [x] Databricks dashboard-embed broker — `GET /dashboard-token` deployed via `terraform/dashboard_embed.tf` (2026-08-21); does the 3-call Databricks OAuth exchange server-side and hands the frontend a short-lived embed token. Service principal's CAN RUN grant verified working end-to-end via a live curl test; the workspace's approved-domains allowlist (for the actual GitHub Pages origin) is set but can only be confirmed once the frontend page below actually loads the embed.
+- [ ] Minimal site (static page) hitting both APIs — `/signals/recent` for raw data, `/dashboard-token` + `@databricks/aibi-client` for the embedded dashboard. Plan is GitHub Pages (not S3+CloudFront — no server runtime needed now that the Databricks secret lives in the Lambda broker, not the frontend)
+- [ ] Deploy the static site to GitHub Pages
 
 **Note:** this also creates a second query pattern (on-demand ticker lookups from the website, vs. the nightly Databricks batch scan) — feed both into the indexing work below.
 
 ---
 
-## Week 8: Harden everything
+## Week 7: Harden everything
 
+**Finishing Up**
 - [ ] Add indexes based on real query patterns from both the nightly backtest job and the website's on-demand ticker lookups (composite index on `(ticker, timestamp)`)
 - [ ] `EXPLAIN ANALYZE` before/after — document the improvement
 - [ ] Expand CI/CD: block merge if tests fail, add ingestion idempotency test
 - [ ] Load-test or at least sanity-check ingestion under a burst of articles
 
----
-
-## Week 9: Polish + writeup
-
+**Final Writeup**
 - [ ] Architecture diagram in the README
 - [ ] Document the DynamoDB-vs-Postgres decision as a tradeoff section
 - [ ] Write up backtest results honestly (including if the signal *didn't* beat cost of turnover)

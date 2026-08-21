@@ -5,7 +5,7 @@ import boto3
 import psycopg
 
 from models import Article
-from schema import TickerSentiment
+from schema import EventType, TickerSentiment
 
 # signals.timestamp is when the run executed, not the articles' publish date (see
 # CLAUDE.md) - a run can process a target_date other than today (ingestion itself
@@ -28,14 +28,67 @@ _SELECT_LATEST_SIGNAL_SQL = """
 # filter is a cheap prefilter for the most obviously-empty scrapes (e.g. a JS-blocked
 # page whose only text is "Please enable JavaScript..."); it won't catch everything
 # junky (a ~300-char paywall stub still passes) - the chain's own prompt handles those.
+#
+# Excludes on article_extraction_attempts, not on an explicit exclude_ids list -
+# an attempt row exists once the chain has responded for this (article, ticker)
+# pair regardless of what it said, including "no entry for this ticker" (see
+# mark_attempted below). Using signals.article_ids for this instead (the
+# original approach) meant an empty-result extraction left no record anywhere,
+# so the same already-settled article kept coming back as "new" forever - see
+# CLAUDE.md's 2026-08-17 note.
+#
+# Also excludes an unattempted article if a signal for this ticker/day already
+# exists AND was produced after this article was ingested - i.e. that signal's
+# run already had the chance to see this article and still has no attempts row
+# for it, meaning every fallback failed. There's no point spending quota
+# rediscovering the same failure once the day is already represented by a
+# signal (2026-08-18: found 1,159 such stragglers account-wide burning ~86% of
+# a backfill run's quota on already-settled dates). The ingested_at comparison
+# (rather than excluding on "any signal exists at all") is what keeps this from
+# breaking the live daily run's intraday behavior: a genuinely new article that
+# arrives AFTER the day's first signal must still be tried so its ticker's
+# signal can be appended to, not just the article's first-ever candidacy.
 _SELECT_NEW_ARTICLES_SQL = """
-    SELECT id, headline, text, url, datetime, tickers, ingested_at
-    FROM articles
-    WHERE %(ticker)s = ANY(tickers)
-      AND datetime::date = %(target_date)s
-      AND text IS NOT NULL
-      AND length(text) >= 100
-      AND NOT (id = ANY(%(exclude_ids)s))
+    SELECT a.id, a.headline, a.text, a.url, a.datetime, a.tickers, a.ingested_at
+    FROM articles a
+    WHERE %(ticker)s = ANY(a.tickers)
+      AND a.datetime::date = %(target_date)s
+      AND a.text IS NOT NULL
+      AND length(a.text) >= 100
+      AND NOT EXISTS (
+        SELECT 1 FROM article_extraction_attempts x
+        WHERE x.article_id = a.id AND x.ticker = %(ticker)s
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM signals s
+        WHERE s.ticker = %(ticker)s
+          AND s.timestamp > a.ingested_at
+          AND EXISTS (
+            SELECT 1 FROM articles a2 WHERE a2.id = ANY(s.article_ids) AND a2.datetime::date = %(target_date)s
+          )
+      )
+"""
+
+# Per-article extractions for this ticker/day that haven't been folded into a
+# signal yet (not present in the latest signal's article_ids). Reads from
+# article_sentiment rather than from the current run's in-memory extraction
+# results, so a combine failure on an earlier run - or an earlier day's run -
+# self-heals: the article shows up here again next time regardless of when it
+# was extracted, instead of being silently dropped because it wasn't
+# re-extracted this run.
+_SELECT_UNCOMBINED_SENTIMENT_SQL = """
+    SELECT s.article_id, s.sentiment, s.event_type, s.involvement
+    FROM article_sentiment s
+    JOIN articles a ON a.id = s.article_id
+    WHERE s.ticker = %(ticker)s
+      AND a.datetime::date = %(target_date)s
+      AND NOT (s.article_id = ANY(%(exclude_ids)s))
+"""
+
+_INSERT_ATTEMPT_SQL = """
+    INSERT INTO article_extraction_attempts (article_id, ticker)
+    VALUES (%(article_id)s, %(ticker)s)
+    ON CONFLICT (article_id, ticker) DO NOTHING
 """
 
 _INSERT_SIGNAL_SQL = """
@@ -46,11 +99,12 @@ _INSERT_SIGNAL_SQL = """
 # ON CONFLICT DO UPDATE (not DO NOTHING) so a re-extraction of the same
 # article/ticker pair - e.g. a rerun - overwrites rather than leaving a stale value.
 _UPSERT_ARTICLE_SENTIMENT_SQL = """
-    INSERT INTO article_sentiment (article_id, ticker, sentiment, involvement)
-    VALUES (%(article_id)s, %(ticker)s, %(sentiment)s, %(involvement)s)
+    INSERT INTO article_sentiment (article_id, ticker, sentiment, involvement, event_type)
+    VALUES (%(article_id)s, %(ticker)s, %(sentiment)s, %(involvement)s, %(event_type)s)
     ON CONFLICT (article_id, ticker) DO UPDATE SET
         sentiment = EXCLUDED.sentiment,
-        involvement = EXCLUDED.involvement
+        involvement = EXCLUDED.involvement,
+        event_type = EXCLUDED.event_type
 """
 
 
@@ -91,11 +145,53 @@ def fetch_latest_signal(conn: psycopg.Connection, ticker: str, target_date: date
         return {"sentiment": float(sentiment), "involvement": float(involvement), "article_ids": list(article_ids)}
 
 
-def fetch_new_articles(conn: psycopg.Connection, ticker: str, exclude_ids: list[int], target_date: date) -> list[Article]:
+def fetch_new_articles(conn: psycopg.Connection, ticker: str, target_date: date) -> list[Article]:
     with conn.cursor() as cur:
-        cur.execute(_SELECT_NEW_ARTICLES_SQL, {"ticker": ticker, "exclude_ids": exclude_ids or [], "target_date": target_date})
+        cur.execute(_SELECT_NEW_ARTICLES_SQL, {"ticker": ticker, "target_date": target_date})
         columns = [desc[0] for desc in cur.description]
         return [Article(**dict(zip(columns, row))) for row in cur.fetchall()]
+
+
+def mark_attempted(conn: psycopg.Connection, article_id: int, tickers: list[str]) -> None:
+    """Records that the chain responded for (article_id, ticker), for every ticker
+    it was asked about - regardless of whether that ticker ended up with a real
+    entry in the response. See _SELECT_NEW_ARTICLES_SQL for why this exists."""
+    with conn.cursor() as cur:
+        for ticker in tickers:
+            cur.execute(_INSERT_ATTEMPT_SQL, {"article_id": article_id, "ticker": ticker})
+
+
+def fetch_uncombined_sentiment(conn: psycopg.Connection, ticker: str, target_date: date, exclude_ids: list[int]) -> list[tuple[int, TickerSentiment]]:
+    """article_sentiment rows for this ticker/day not yet reflected in the latest
+    signal's article_ids (pass that signal's article_ids as exclude_ids). reasoning
+    isn't persisted (schema.py marks it TODO(cut-before-ship)), so reconstructed
+    entries carry a placeholder - combine_chain.py only uses it as LLM-prompt
+    context, not for anything stored.
+
+    event_type also falls back to a placeholder for rows written before the
+    2026-08-17 migration added that column (event_type IS NULL) - there turned
+    out to be a large backlog of these: extracted successfully but never
+    combined, from before combine_chain.py had its own model fallback
+    (2026-08-16, see CLAUDE.md), so a quota-exhausted combine call silently
+    dropped them. EventType(None) would raise; market_wide_movement is the
+    designated catch-all category, and this only affects one input line in
+    combine_chain.py's prompt context, not anything persisted."""
+    with conn.cursor() as cur:
+        cur.execute(_SELECT_UNCOMBINED_SENTIMENT_SQL, {"ticker": ticker, "target_date": target_date, "exclude_ids": exclude_ids or []})
+        rows = cur.fetchall()
+    return [
+        (
+            article_id,
+            TickerSentiment(
+                ticker=ticker,
+                sentiment=float(sentiment),
+                event_type=EventType(event_type) if event_type else EventType.market_wide_movement,
+                involvement=float(involvement),
+                reasoning="(reconstructed from article_sentiment - original reasoning not persisted)",
+            ),
+        )
+        for article_id, sentiment, event_type, involvement in rows
+    ]
 
 
 def insert_signal(conn: psycopg.Connection, ticker: str, event_type: str, sentiment: float, involvement: float, article_ids: list[int]) -> None:
@@ -120,4 +216,5 @@ def upsert_article_sentiment(conn: psycopg.Connection, article_id: int, ticker_s
                 "ticker": ts.ticker,
                 "sentiment": ts.sentiment,
                 "involvement": ts.involvement,
+                "event_type": ts.event_type.value,
             })
