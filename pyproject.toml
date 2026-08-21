@@ -37,3 +37,12 @@ price_backfill = [
     "psycopg[binary]>=3.3.4",
     "yfinance>=1.5.2",
 ]
+# boto3/psycopg duplicated from [project.dependencies] (not group-exclusive,
+# same reasoning as the langchain group above) so `uv export --only-group api`
+# produces a standalone requirements.txt for the api Lambda's build.ps1
+# without pulling in trafilatura/finnhub-python/pydantic/python-dotenv, which
+# a plain `uv export` would.
+api = [
+    "boto3>=1.43.51",
+    "psycopg[binary]>=3.3.4",
+]

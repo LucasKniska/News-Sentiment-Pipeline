@@ -23,9 +23,13 @@ def lambda_handler(event, context):
     except (TypeError, ValueError):
         limit = _DEFAULT_LIMIT
 
+    ticker = params.get("ticker")
+    if ticker:
+        ticker = ticker.upper()
+
     conn = get_connection()
     try:
-        signals = fetch_recent_signals(conn, limit)
+        signals = fetch_recent_signals(conn, limit, ticker)
     finally:
         conn.close()
 
