@@ -62,16 +62,18 @@ def fetch_dashboard_embed_token() -> dict:
     )
     tokeninfo = _get(tokeninfo_url, broad["access_token"])
 
-    # Step 3: exchange for the tightly-scoped, 1-hour embed token.
-    scoped = _post_form(
-        token_url,
-        {
-            "grant_type": "client_credentials",
-            "authorization_details": json.dumps(tokeninfo["authorization_details"]),
-        },
-        client_id,
-        client_secret,
-    )
+    # Step 3: exchange for the tightly-scoped, 1-hour embed token. Forward
+    # every field tokeninfo returned (not just authorization_details) - it
+    # also carries a "scope" claim (e.g. "dashboards.lakeview-embedded:read
+    # ...") that the embed API rejects the token without. Dropping it here
+    # previously produced a token with an empty scope claim, which the
+    # dashboard viewer API rejects with a 403 "does not have required
+    # scopes: dashboards" even though authorization_details/CAN RUN were
+    # both correct.
+    scoped_params = dict(tokeninfo)
+    scoped_params["authorization_details"] = json.dumps(scoped_params["authorization_details"])
+    scoped_params["grant_type"] = "client_credentials"
+    scoped = _post_form(token_url, scoped_params, client_id, client_secret)
 
     return {
         "token": scoped["access_token"],
