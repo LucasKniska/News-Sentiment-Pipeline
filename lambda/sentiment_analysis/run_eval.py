@@ -14,7 +14,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-from chain import extract_with_fallback  # noqa: E402  (must import after load_dotenv, see local_run.py)
+from chain import (
+    extract_with_fallback,
+)  # noqa: E402  (must import after load_dotenv, see local_run.py)
 from models import Article  # noqa: E402
 
 # The ticker build_eval_set.py sampled and eval_set.csv was hand-rated against -
@@ -32,7 +34,9 @@ def _load_rows() -> list[dict]:
     with open(_EVAL_SET_PATH, encoding="utf-8") as f:
         rows = [r for r in csv.DictReader(f) if r["human_sentiment"].strip()]
     if not rows:
-        raise SystemExit(f"No rated rows in {_EVAL_SET_PATH} - run build_eval_set.py and hand-rate it first.")
+        raise SystemExit(
+            f"No rated rows in {_EVAL_SET_PATH} - run build_eval_set.py and hand-rate it first."
+        )
     return rows
 
 
@@ -73,7 +77,9 @@ def run_eval(rows: list[dict]) -> dict:
         if model_used:
             model_successes[model_used] += 1
 
-        entry = next((ts for ts in result.ticker_sentiments if ts.ticker == _EVAL_TICKER), None)
+        entry = next(
+            (ts for ts in result.ticker_sentiments if ts.ticker == _EVAL_TICKER), None
+        )
         human = row["human_sentiment"].strip()
 
         if human == "skip":
@@ -105,9 +111,13 @@ def main() -> None:
     print(f"Running fallback pipeline over {len(rows)} rated articles...")
     result = run_eval(rows)
 
-    print(f"\n{'MAE':<8}{'n':<5}{'omitted':<10}{'skip agree':<12}{'all-failed':<12}{'seconds':<8}")
+    print(
+        f"\n{'MAE':<8}{'n':<5}{'omitted':<10}{'skip agree':<12}{'all-failed':<12}{'seconds':<8}"
+    )
     mae = f"{result['mae']:.3f}" if result["mae"] is not None else "n/a"
-    print(f"{mae:<8}{result['n_rated']:<5}{result['omitted_on_rated']:<10}{result['skip_agreement']:<12}{result['all_models_failed']:<12}{result['seconds']:<8.1f}")
+    print(
+        f"{mae:<8}{result['n_rated']:<5}{result['omitted_on_rated']:<10}{result['skip_agreement']:<12}{result['all_models_failed']:<12}{result['seconds']:<8.1f}"
+    )
 
     print("\nWhich model handled each article (best rung first):")
     for model, count in result["model_successes"].most_common():

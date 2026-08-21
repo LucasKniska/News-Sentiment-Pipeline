@@ -9,7 +9,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-from handler import DEFAULT_TICKERS, lambda_handler  # noqa: E402  (must import after load_dotenv)
+from handler import (
+    DEFAULT_TICKERS,
+    lambda_handler,
+)  # noqa: E402  (must import after load_dotenv)
 
 
 def _parse_date(s: str) -> date:
@@ -19,7 +22,9 @@ def _parse_date(s: str) -> date:
 if __name__ == "__main__":
     args = sys.argv[1:]
     if len(args) < 2:
-        print("Usage: backfill_run.py start_date YYYY-MM-DD end_date YYYY-MM-DD [TICKER...]")
+        print(
+            "Usage: backfill_run.py start_date YYYY-MM-DD end_date YYYY-MM-DD [TICKER...]"
+        )
         sys.exit(1)
 
     start_date = _parse_date(args[0])
@@ -32,7 +37,11 @@ if __name__ == "__main__":
         # One invocation per day (not one multi-day range) so
         # MAX_ARTICLES_PER_TICKER_PER_DAY caps each day independently rather
         # than the whole range combined.
-        event = {"tickers": tickers, "from_date": day.isoformat(), "to_date": day.isoformat()}
+        event = {
+            "tickers": tickers,
+            "from_date": day.isoformat(),
+            "to_date": day.isoformat(),
+        }
         result = lambda_handler(event, None)
         for ticker, count in result["articleCounts"].items():
             totals[ticker] += count

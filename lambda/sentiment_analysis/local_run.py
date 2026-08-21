@@ -9,7 +9,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-from run import run  # noqa: E402  (must import after load_dotenv - schema.py reads TICKERS at import time)
+from run import (
+    run,
+)  # noqa: E402  (must import after load_dotenv - schema.py reads TICKERS at import time)
 
 if __name__ == "__main__":
     # Optional YYYY-MM-DD arg to target a known date instead of run()'s "yesterday"

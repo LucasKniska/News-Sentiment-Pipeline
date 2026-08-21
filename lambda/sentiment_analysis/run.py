@@ -37,7 +37,10 @@ def run(target_date: date | None = None) -> dict:
 
     conn = get_connection()
     try:
-        previous_by_ticker = {ticker: fetch_latest_signal(conn, ticker, target_date) for ticker in TRACKED_TICKERS}
+        previous_by_ticker = {
+            ticker: fetch_latest_signal(conn, ticker, target_date)
+            for ticker in TRACKED_TICKERS
+        }
 
         # Union of articles new for at least one tracked ticker - each gets exactly
         # one LLM call this run regardless of how many tracked tickers it mentions.
@@ -54,13 +57,20 @@ def run(target_date: date | None = None) -> dict:
         # main thread once all extractions have completed.
         extraction_results: dict[int, ArticleExtraction] = {}
         with ThreadPoolExecutor(max_workers=MAX_EXTRACTION_WORKERS) as pool:
-            future_to_article = {pool.submit(extract_with_fallback, article): article for article in candidate_articles.values()}
+            future_to_article = {
+                pool.submit(extract_with_fallback, article): article
+                for article in candidate_articles.values()
+            }
             for future in as_completed(future_to_article):
                 article = future_to_article[future]
                 try:
                     result, model_used = future.result()
                 except Exception:
-                    logger.warning("Extraction failed for article %s on every fallback model", article.id, exc_info=True)
+                    logger.warning(
+                        "Extraction failed for article %s on every fallback model",
+                        article.id,
+                        exc_info=True,
+                    )
                     continue
                 if model_used:
                     logger.info("Article %s extracted via %s", article.id, model_used)
@@ -87,7 +97,9 @@ def run(target_date: date | None = None) -> dict:
         for ticker in TRACKED_TICKERS:
             previous = previous_by_ticker[ticker]
             already_ids = previous["article_ids"] if previous else []
-            new_entries = fetch_uncombined_sentiment(conn, ticker, target_date, already_ids)
+            new_entries = fetch_uncombined_sentiment(
+                conn, ticker, target_date, already_ids
+            )
             if not new_entries:
                 continue
             try:
@@ -167,7 +179,8 @@ def _fill_date(
             logger.warning(
                 "Date %s still has remaining work after %d attempts (likely a persistent combine/insert "
                 "failure) - moving on rather than retrying indefinitely",
-                target_date, attempts,
+                target_date,
+                attempts,
             )
             return None
 
@@ -194,7 +207,9 @@ def _fill_date(
 # tops up yesterday first and only spends whatever time/quota is left on the
 # historical range - on a morning where yesterday alone exhausts the quota,
 # the range gets zero progress that day, which is the correct tradeoff.
-def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[], int] | None = None) -> dict:
+def run_backfill(
+    start_date: date, end_date: date, get_remaining_ms: Callable[[], int] | None = None
+) -> dict:
     # Reserves enough runway for one more date's worst-case duration (matches
     # the live daily schedule's own 900s/15min Lambda timeout) rather than
     # letting Lambda kill an invocation mid-call.
@@ -206,7 +221,14 @@ def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[]
         results: dict[str, dict] = {}
 
         most_recent_date = date.today() - timedelta(days=1)
-        status = _fill_date(conn, most_recent_date, MAX_ATTEMPTS_PER_DATE, get_remaining_ms, SAFETY_MARGIN_MS, results)
+        status = _fill_date(
+            conn,
+            most_recent_date,
+            MAX_ATTEMPTS_PER_DATE,
+            get_remaining_ms,
+            SAFETY_MARGIN_MS,
+            results,
+        )
         if status is not None:
             return {"status": status, "results": results}
 
@@ -220,7 +242,14 @@ def run_backfill(start_date: date, end_date: date, get_remaining_ms: Callable[[]
                 cursor_date += timedelta(days=1)
                 continue
 
-            status = _fill_date(conn, cursor_date, MAX_ATTEMPTS_PER_DATE, get_remaining_ms, SAFETY_MARGIN_MS, results)
+            status = _fill_date(
+                conn,
+                cursor_date,
+                MAX_ATTEMPTS_PER_DATE,
+                get_remaining_ms,
+                SAFETY_MARGIN_MS,
+                results,
+            )
             if status is not None:
                 return {"status": status, "results": results}
 

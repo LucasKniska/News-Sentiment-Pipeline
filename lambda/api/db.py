@@ -40,7 +40,9 @@ def get_connection() -> psycopg.Connection:
     return psycopg.connect()
 
 
-def fetch_recent_signals(conn: psycopg.Connection, limit: int, ticker: str | None = None) -> list[dict]:
+def fetch_recent_signals(
+    conn: psycopg.Connection, limit: int, ticker: str | None = None
+) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(_SELECT_RECENT_SIGNALS_SQL, {"limit": limit, "ticker": ticker})
         rows = cur.fetchall()

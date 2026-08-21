@@ -42,8 +42,14 @@ class EventType(str, Enum):
 
 
 class TickerSentiment(BaseModel):
-    ticker: Ticker = Field(description="Ticker this sentiment applies to - must be one of the tickers listed in the prompt")
-    sentiment: float = Field(ge=-1, le=1, description="Sentiment of the article's discussion of this specific ticker, -1 to 1")
+    ticker: Ticker = Field(
+        description="Ticker this sentiment applies to - must be one of the tickers listed in the prompt"
+    )
+    sentiment: float = Field(
+        ge=-1,
+        le=1,
+        description="Sentiment of the article's discussion of this specific ticker, -1 to 1",
+    )
     event_type: EventType
     involvement: float = Field(
         ge=0,
@@ -57,7 +63,9 @@ class TickerSentiment(BaseModel):
     # TODO(cut-before-ship): kept only while calibrating against the eval set so a
     # wrong call can be inspected. Not part of the `signals` table - drop this field
     # once the chain's accuracy/involvement correlation checks out.
-    reasoning: str = Field(description="One-sentence justification for the sentiment/event_type call")
+    reasoning: str = Field(
+        description="One-sentence justification for the sentiment/event_type call"
+    )
 
 
 class ArticleExtraction(BaseModel):
@@ -74,8 +82,15 @@ class CombinedSignal(BaseModel):
     """Output of the second (combine) chain - blends this ticker's previous cumulative
     signal with today's newly-extracted per-article TickerSentiments into one value."""
 
-    sentiment: float = Field(ge=-1, le=1, description="Blended sentiment for this ticker's day so far, -1 to 1")
+    sentiment: float = Field(
+        ge=-1,
+        le=1,
+        description="Blended sentiment for this ticker's day so far, -1 to 1",
+    )
     event_type: EventType
     # TODO(cut-before-ship): kept only while calibrating against the eval set so a
     # wrong combine call can be inspected. Not part of the `signals` table.
-    reasoning: str | None = Field(default=None, description="One-sentence justification for the blended sentiment/event_type call")
+    reasoning: str | None = Field(
+        default=None,
+        description="One-sentence justification for the blended sentiment/event_type call",
+    )

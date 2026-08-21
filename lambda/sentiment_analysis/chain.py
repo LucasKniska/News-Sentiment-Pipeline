@@ -58,15 +58,18 @@ connection - always make a genuine best-effort call grounded in the article's \
 content (using overall market/sector context where the connection is indirect) \
 rather than inventing a placeholder or no-op entry."""
 
-_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", SYSTEM_PROMPT),
-    ("human", "Headline: {headline}\n\nArticle text:\n{text}"),
-])
+_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", SYSTEM_PROMPT),
+        ("human", "Headline: {headline}\n\nArticle text:\n{text}"),
+    ]
+)
 
 # Groq (free/cheap) default while iterating on the pipeline - swap back to an
 # Anthropic model id (see run_eval.py) once the extraction is validated and the
 # cost of running it for real is worth paying.
 _DEFAULT_MODEL = "openai/gpt-oss-120b"
+
 
 # Only two providers in use - anything not an Anthropic model id ("claude-...") is
 # assumed Groq-hosted, rather than maintaining a name/prefix list that has to be
@@ -77,7 +80,9 @@ _DEFAULT_MODEL = "openai/gpt-oss-120b"
 def get_llm(model: str = _DEFAULT_MODEL, api_key: str | None = None) -> BaseChatModel:
     if model.startswith("claude"):
         return ChatAnthropic(model=model, temperature=0)
-    return ChatGroq(model=model, temperature=0, **({"groq_api_key": api_key} if api_key else {}))
+    return ChatGroq(
+        model=model, temperature=0, **({"groq_api_key": api_key} if api_key else {})
+    )
 
 
 # Groq's currently-active general-purpose chat models (verified via
@@ -109,7 +114,9 @@ GROQ_MODELS_BEST_TO_WORST = [
 # back to a single-key list ([None], meaning "let ChatGroq resolve GROQ_API_KEY
 # itself") when GROQ_API_KEY_2 isn't set, so this is a no-op until a second key is
 # configured.
-GROQ_API_KEYS: list[str | None] = [k for k in (os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")) if k] or [None]
+GROQ_API_KEYS: list[str | None] = [
+    k for k in (os.environ.get("GROQ_API_KEY"), os.environ.get("GROQ_API_KEY_2")) if k
+] or [None]
 
 # Groq's 429s come in two flavors that behave very differently: TPD (tokens per
 # day) won't clear for hours, while TPM (tokens per minute) clears in seconds.
@@ -200,11 +207,15 @@ def extract(article: Article, chain: Runnable | None = None) -> ArticleExtractio
         return ArticleExtraction(ticker_sentiments=[])
 
     chain = chain or build_chain()
-    return invoke_with_recovery(chain, {
-        "tickers": ", ".join(tickers),
-        "headline": article.headline,
-        "text": article.text,
-    }, ArticleExtraction)
+    return invoke_with_recovery(
+        chain,
+        {
+            "tickers": ", ".join(tickers),
+            "headline": article.headline,
+            "text": article.text,
+        },
+        ArticleExtraction,
+    )
 
 
 def invoke_with_model_fallback(
@@ -250,11 +261,22 @@ def invoke_with_model_fallback(
                     if _is_daily_rate_limit(e):
                         with _exhausted_combos_lock:
                             _exhausted_combos.add(combo)
-                        logger.warning("Model %s (key #%d) hit its daily quota - skipping for the rest of this run: %s", model, i + 1, e)
+                        logger.warning(
+                            "Model %s (key #%d) hit its daily quota - skipping for the rest of this run: %s",
+                            model,
+                            i + 1,
+                            e,
+                        )
                         break
                     if retries_left > 0:
                         wait = min(_parse_retry_after(e), _TPM_RETRY_CAP_SECONDS)
-                        logger.warning("Model %s (key #%d) hit a per-minute limit - retrying in %.1fs: %s", model, i + 1, wait, e)
+                        logger.warning(
+                            "Model %s (key #%d) hit a per-minute limit - retrying in %.1fs: %s",
+                            model,
+                            i + 1,
+                            wait,
+                            e,
+                        )
                         time.sleep(wait)
                         retries_left -= 1
                         continue
@@ -267,7 +289,9 @@ def invoke_with_model_fallback(
     # last_error is still None if every (model, key) combo was already in
     # _exhausted_combos before this call even tried one - i.e. every option is
     # known TPD-dead for the day, not just this article's.
-    raise last_error or RuntimeError("All models/keys already marked daily-quota-exhausted for this run")
+    raise last_error or RuntimeError(
+        "All models/keys already marked daily-quota-exhausted for this run"
+    )
 
 
 def extract_with_fallback(

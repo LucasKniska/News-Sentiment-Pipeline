@@ -12,9 +12,17 @@ from schema import ArticleExtraction, EventType, TickerSentiment  # noqa: E402
 # subsequent call - simulates a model's Groq quota running out mid-run.
 _CALLS_BEFORE_EXHAUSTION = 5
 
-_DUMMY_RESULT = ArticleExtraction(ticker_sentiments=[
-    TickerSentiment(ticker="AAPL", sentiment=0.0, event_type=EventType.market_wide_movement, involvement=0.1, reasoning="stub")
-])
+_DUMMY_RESULT = ArticleExtraction(
+    ticker_sentiments=[
+        TickerSentiment(
+            ticker="AAPL",
+            sentiment=0.0,
+            event_type=EventType.market_wide_movement,
+            involvement=0.1,
+            reasoning="stub",
+        )
+    ]
+)
 
 
 class _FakeChain:
@@ -53,8 +61,14 @@ def main() -> None:
         models_used.append(model_used)
         print(f"call {i + 1:>2}: handled by {model_used}")
 
-    expected = [model for model in GROQ_MODELS_BEST_TO_WORST for _ in range(_CALLS_BEFORE_EXHAUSTION)]
-    assert models_used == expected, f"rotation mismatch:\n  expected {expected}\n  got      {models_used}"
+    expected = [
+        model
+        for model in GROQ_MODELS_BEST_TO_WORST
+        for _ in range(_CALLS_BEFORE_EXHAUSTION)
+    ]
+    assert (
+        models_used == expected
+    ), f"rotation mismatch:\n  expected {expected}\n  got      {models_used}"
     print("\nOK - rotation matched the expected best-to-worst schedule exactly.")
 
 

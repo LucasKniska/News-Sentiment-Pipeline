@@ -10,7 +10,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-from db import get_connection  # noqa: E402  (must import after load_dotenv, see local_run.py)
+from db import (
+    get_connection,
+)  # noqa: E402  (must import after load_dotenv, see local_run.py)
 
 _TICKER = "AAPL"
 _SAMPLE_SIZE = 20
@@ -35,7 +37,9 @@ def build() -> None:
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(_SELECT_RANDOM_SQL, {"ticker": _TICKER, "sample_size": _SAMPLE_SIZE})
+            cur.execute(
+                _SELECT_RANDOM_SQL, {"ticker": _TICKER, "sample_size": _SAMPLE_SIZE}
+            )
             columns = [desc[0] for desc in cur.description]
             rows = [dict(zip(columns, row)) for row in cur.fetchall()]
     finally:

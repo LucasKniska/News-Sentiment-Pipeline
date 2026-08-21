@@ -3,7 +3,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 from aggregate import average_involvement, merge_article_ids
-from chain import GROQ_MODELS_BEST_TO_WORST, get_llm, invoke_with_model_fallback, invoke_with_recovery
+from chain import (
+    GROQ_MODELS_BEST_TO_WORST,
+    get_llm,
+    invoke_with_model_fallback,
+    invoke_with_recovery,
+)
 from schema import CombinedSignal, TickerSentiment
 
 COMBINE_SYSTEM_PROMPT = """You are combining today's sentiment signal for a single \
@@ -33,10 +38,15 @@ For event_type, pick the single event category that best characterizes the most 
 significant news driving today's signal for this ticker - usually the \
 highest-involvement contributor, not necessarily the most recent one."""
 
-_COMBINE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", COMBINE_SYSTEM_PROMPT),
-    ("human", "Ticker: {ticker}\n\nPrevious cumulative signal:\n{previous_summary}\n\nNew article signals:\n{new_entries_summary}"),
-])
+_COMBINE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", COMBINE_SYSTEM_PROMPT),
+        (
+            "human",
+            "Ticker: {ticker}\n\nPrevious cumulative signal:\n{previous_summary}\n\nNew article signals:\n{new_entries_summary}",
+        ),
+    ]
+)
 
 
 def _build_combine_chain(llm: BaseChatModel) -> Runnable:
@@ -84,7 +94,9 @@ def combine_signal(
     if chain is not None:
         result: CombinedSignal = invoke_with_recovery(chain, inputs, CombinedSignal)
     else:
-        result, _ = invoke_with_model_fallback(_build_combine_chain, inputs, CombinedSignal, models)
+        result, _ = invoke_with_model_fallback(
+            _build_combine_chain, inputs, CombinedSignal, models
+        )
     return {
         "sentiment": result.sentiment,
         "event_type": result.event_type.value,

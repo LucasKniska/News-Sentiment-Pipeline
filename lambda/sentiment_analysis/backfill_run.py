@@ -9,7 +9,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-from run import run_backfill  # noqa: E402  (must import after load_dotenv - schema.py reads TICKERS at import time)
+from run import (
+    run_backfill,
+)  # noqa: E402  (must import after load_dotenv - schema.py reads TICKERS at import time)
 
 
 def _parse_date(s: str) -> date:

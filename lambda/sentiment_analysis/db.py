@@ -131,37 +131,55 @@ def get_connection() -> psycopg.Connection:
     return psycopg.connect()
 
 
-def fetch_latest_signal(conn: psycopg.Connection, ticker: str, target_date: date) -> dict | None:
+def fetch_latest_signal(
+    conn: psycopg.Connection, ticker: str, target_date: date
+) -> dict | None:
     """Most recent signals row for this ticker whose article_ids covers
     target_date, or None if no run has processed that day for this ticker yet.
     Its article_ids is the full cumulative list for that day so far - doubles as
     the "already processed" set for this ticker/day."""
     with conn.cursor() as cur:
-        cur.execute(_SELECT_LATEST_SIGNAL_SQL, {"ticker": ticker, "target_date": target_date})
+        cur.execute(
+            _SELECT_LATEST_SIGNAL_SQL, {"ticker": ticker, "target_date": target_date}
+        )
         row = cur.fetchone()
         if row is None:
             return None
         sentiment, involvement, article_ids = row
-        return {"sentiment": float(sentiment), "involvement": float(involvement), "article_ids": list(article_ids)}
+        return {
+            "sentiment": float(sentiment),
+            "involvement": float(involvement),
+            "article_ids": list(article_ids),
+        }
 
 
-def fetch_new_articles(conn: psycopg.Connection, ticker: str, target_date: date) -> list[Article]:
+def fetch_new_articles(
+    conn: psycopg.Connection, ticker: str, target_date: date
+) -> list[Article]:
     with conn.cursor() as cur:
-        cur.execute(_SELECT_NEW_ARTICLES_SQL, {"ticker": ticker, "target_date": target_date})
+        cur.execute(
+            _SELECT_NEW_ARTICLES_SQL, {"ticker": ticker, "target_date": target_date}
+        )
         columns = [desc[0] for desc in cur.description]
         return [Article(**dict(zip(columns, row))) for row in cur.fetchall()]
 
 
-def mark_attempted(conn: psycopg.Connection, article_id: int, tickers: list[str]) -> None:
+def mark_attempted(
+    conn: psycopg.Connection, article_id: int, tickers: list[str]
+) -> None:
     """Records that the chain responded for (article_id, ticker), for every ticker
     it was asked about - regardless of whether that ticker ended up with a real
     entry in the response. See _SELECT_NEW_ARTICLES_SQL for why this exists."""
     with conn.cursor() as cur:
         for ticker in tickers:
-            cur.execute(_INSERT_ATTEMPT_SQL, {"article_id": article_id, "ticker": ticker})
+            cur.execute(
+                _INSERT_ATTEMPT_SQL, {"article_id": article_id, "ticker": ticker}
+            )
 
 
-def fetch_uncombined_sentiment(conn: psycopg.Connection, ticker: str, target_date: date, exclude_ids: list[int]) -> list[tuple[int, TickerSentiment]]:
+def fetch_uncombined_sentiment(
+    conn: psycopg.Connection, ticker: str, target_date: date, exclude_ids: list[int]
+) -> list[tuple[int, TickerSentiment]]:
     """article_sentiment rows for this ticker/day not yet reflected in the latest
     signal's article_ids (pass that signal's article_ids as exclude_ids). reasoning
     isn't persisted (schema.py marks it TODO(cut-before-ship)), so reconstructed
@@ -177,7 +195,14 @@ def fetch_uncombined_sentiment(conn: psycopg.Connection, ticker: str, target_dat
     designated catch-all category, and this only affects one input line in
     combine_chain.py's prompt context, not anything persisted."""
     with conn.cursor() as cur:
-        cur.execute(_SELECT_UNCOMBINED_SENTIMENT_SQL, {"ticker": ticker, "target_date": target_date, "exclude_ids": exclude_ids or []})
+        cur.execute(
+            _SELECT_UNCOMBINED_SENTIMENT_SQL,
+            {
+                "ticker": ticker,
+                "target_date": target_date,
+                "exclude_ids": exclude_ids or [],
+            },
+        )
         rows = cur.fetchall()
     return [
         (
@@ -185,7 +210,11 @@ def fetch_uncombined_sentiment(conn: psycopg.Connection, ticker: str, target_dat
             TickerSentiment(
                 ticker=ticker,
                 sentiment=float(sentiment),
-                event_type=EventType(event_type) if event_type else EventType.market_wide_movement,
+                event_type=(
+                    EventType(event_type)
+                    if event_type
+                    else EventType.market_wide_movement
+                ),
                 involvement=float(involvement),
                 reasoning="(reconstructed from article_sentiment - original reasoning not persisted)",
             ),
@@ -194,27 +223,42 @@ def fetch_uncombined_sentiment(conn: psycopg.Connection, ticker: str, target_dat
     ]
 
 
-def insert_signal(conn: psycopg.Connection, ticker: str, event_type: str, sentiment: float, involvement: float, article_ids: list[int]) -> None:
+def insert_signal(
+    conn: psycopg.Connection,
+    ticker: str,
+    event_type: str,
+    sentiment: float,
+    involvement: float,
+    article_ids: list[int],
+) -> None:
     with conn.cursor() as cur:
-        cur.execute(_INSERT_SIGNAL_SQL, {
-            "ticker": ticker,
-            "event_type": event_type,
-            "sentiment": sentiment,
-            "involvement": involvement,
-            "article_ids": article_ids,
-        })
+        cur.execute(
+            _INSERT_SIGNAL_SQL,
+            {
+                "ticker": ticker,
+                "event_type": event_type,
+                "sentiment": sentiment,
+                "involvement": involvement,
+                "article_ids": article_ids,
+            },
+        )
 
 
-def upsert_article_sentiment(conn: psycopg.Connection, article_id: int, ticker_sentiments: list[TickerSentiment]) -> None:
+def upsert_article_sentiment(
+    conn: psycopg.Connection, article_id: int, ticker_sentiments: list[TickerSentiment]
+) -> None:
     """Records the raw per-ticker extraction output for one article - every entry
     the chain produced, regardless of whether it ended up "new" for that ticker's
     signals combine this run (see run.py)."""
     with conn.cursor() as cur:
         for ts in ticker_sentiments:
-            cur.execute(_UPSERT_ARTICLE_SENTIMENT_SQL, {
-                "article_id": article_id,
-                "ticker": ts.ticker,
-                "sentiment": ts.sentiment,
-                "involvement": ts.involvement,
-                "event_type": ts.event_type.value,
-            })
+            cur.execute(
+                _UPSERT_ARTICLE_SENTIMENT_SQL,
+                {
+                    "article_id": article_id,
+                    "ticker": ts.ticker,
+                    "sentiment": ts.sentiment,
+                    "involvement": ts.involvement,
+                    "event_type": ts.event_type.value,
+                },
+            )

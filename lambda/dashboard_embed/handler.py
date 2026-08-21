@@ -51,7 +51,12 @@ def fetch_dashboard_embed_token() -> dict:
     token_url = f"{host}/oidc/v1/token?o={org_id}"
 
     # Step 1: broad service-principal access token.
-    broad = _post_form(token_url, {"grant_type": "client_credentials", "scope": "all-apis"}, client_id, client_secret)
+    broad = _post_form(
+        token_url,
+        {"grant_type": "client_credentials", "scope": "all-apis"},
+        client_id,
+        client_secret,
+    )
 
     # Step 2: dashboard-scoped authorization_details for this viewer - this
     # is what actually depends on the service principal's CAN RUN grant on
