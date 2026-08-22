@@ -76,7 +76,9 @@ def fetch_dashboard_embed_token() -> dict:
     # scopes: dashboards" even though authorization_details/CAN RUN were
     # both correct.
     scoped_params = dict(tokeninfo)
-    scoped_params["authorization_details"] = json.dumps(scoped_params["authorization_details"])
+    scoped_params["authorization_details"] = json.dumps(
+        scoped_params["authorization_details"]
+    )
     scoped_params["grant_type"] = "client_credentials"
     scoped = _post_form(token_url, scoped_params, client_id, client_secret)
 
