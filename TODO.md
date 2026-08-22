@@ -20,9 +20,9 @@ Week-by-week build plan and current status. See [README.md](README.md) for what 
 - [ ] ~~Migration tool (Alembic or Flyway)~~ — deliberate non-goal; the plain `db/schema.sql` + `run_query.py` script has handled two table additions fine
 
 **CI/CD**
-- [ ] GitHub Actions: run lint + tests on PR
-- [ ] GitHub Actions: `terraform plan` on PR, `terraform apply` on merge
-- [ ] CI check that fails if a schema change ships without a migration
+- [x] GitHub Actions: lint on PR (`.github/workflows/ci.yml`) — Python via `black --check`, Terraform via `terraform fmt -check`. Scoped to lint only, not "lint + tests": the only test-shaped scripts (`run_eval.py`, `test_fallback.py`) don't add value running automatically on every PR, so no test job was added.
+- [ ] ~~GitHub Actions: `terraform plan` on PR, `terraform apply` on merge~~ — deliberately not doing this; it needs Terraform state stored remotely (S3 backend + lock table, itself still unchecked above) to be safe from a CI runner, and the decision has been made not to migrate state to a remote/cloud backend. `terraform validate` is also skipped in CI for a related reason: `terraform/variables.tf` is gitignored, so it doesn't exist on a fresh CI checkout and every `var.*` reference would fail as undeclared.
+- [ ] ~~CI check that fails if a schema change ships without a migration~~ — deliberately not doing this; deferred alongside the item above rather than attempted separately
 
 **Ingestion**
 - [x] Pick a news source (Alpha Vantage News Sentiment / Finnhub / NewsAPI) — Finnhub

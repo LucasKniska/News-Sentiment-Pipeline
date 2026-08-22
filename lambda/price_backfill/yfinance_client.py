@@ -9,4 +9,6 @@ def fetch_price_history(ticker: str, start_date: date, end_date: date):
     yfinance's `end` is exclusive, so it's bumped by a day here to make this
     function's own range inclusive on both ends.
     """
-    return yf.Ticker(ticker).history(start=start_date, end=end_date + timedelta(days=1), interval="1d")
+    return yf.Ticker(ticker).history(
+        start=start_date, end=end_date + timedelta(days=1), interval="1d"
+    )

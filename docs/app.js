@@ -3,6 +3,7 @@ import { DatabricksDashboard } from "https://cdn.jsdelivr.net/npm/@databricks/ai
 const DASHBOARD_TOKEN_URL = "https://1ghri8v2si.execute-api.us-east-1.amazonaws.com/dashboard-token";
 
 const statusEl = document.getElementById("status");
+const statusTextEl = statusEl.querySelector(".status-text");
 const containerEl = document.getElementById("dashboard-container");
 
 async function fetchEmbedConfig() {
@@ -14,7 +15,6 @@ async function fetchEmbedConfig() {
 }
 
 async function main() {
-  statusEl.textContent = "Loading dashboard...";
   const config = await fetchEmbedConfig();
 
   const dashboard = new DatabricksDashboard({
@@ -27,10 +27,11 @@ async function main() {
   });
 
   await dashboard.initialize();
-  statusEl.textContent = "";
+  statusEl.hidden = true;
 }
 
 main().catch((err) => {
   console.error(err);
-  statusEl.textContent = `Failed to load dashboard: ${err.message}`;
+  statusEl.classList.add("status--error");
+  statusTextEl.textContent = `Failed to load dashboard: ${err.message}`;
 });
