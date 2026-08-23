@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-08-22",
+  "evalSetSize": 20,
+  "models": [
+    { "model": "openai/gpt-oss-120b", "provider": "Groq", "mae": 0.200, "omitted": 0, "skipAgreement": "5/5", "failCount": 0, "latencyMeanS": 7.98, "latencyP95S": 17.55, "inputTokens": 29639, "outputTokens": 6274, "estCostUsd": 0.0082 },
+    { "model": "openai/gpt-oss-20b", "provider": "Groq", "mae": 0.213, "omitted": 0, "skipAgreement": "5/5", "failCount": 0, "latencyMeanS": 10.12, "latencyP95S": 19.45, "inputTokens": 29639, "outputTokens": 8550, "estCostUsd": 0.0048 },
+    { "model": "qwen/qwen3.6-27b", "provider": "Groq", "mae": 0.185, "omitted": 0, "skipAgreement": "5/5", "failCount": 2, "latencyMeanS": 18.35, "latencyP95S": 32.35, "inputTokens": 31024, "outputTokens": 24366, "estCostUsd": 0.0917 },
+    { "model": "claude-haiku-4-5", "provider": "Anthropic", "mae": 0.179, "omitted": 1, "skipAgreement": "5/5", "failCount": 0, "latencyMeanS": 1.65, "latencyP95S": 2.93, "inputTokens": 43883, "outputTokens": 2115, "estCostUsd": 0.0545 },
+    { "model": "claude-sonnet-5", "provider": "Anthropic", "mae": 0.180, "omitted": 0, "skipAgreement": "5/5", "failCount": 0, "latencyMeanS": 2.32, "latencyP95S": 2.94, "inputTokens": 54556, "outputTokens": 2770, "estCostUsd": 0.1368 }
+  ]
+}

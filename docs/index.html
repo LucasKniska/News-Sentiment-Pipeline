@@ -45,6 +45,37 @@
         </div>
         <div id="dashboard-container"></div>
       </section>
+
+      <section class="model-comparison-card">
+        <div class="card-header">
+          <h2>Model comparison</h2>
+          <p class="card-subtitle">
+            The sentiment-extraction chain run against a 20-article hand-rated eval set, one model at a time (no fallback ladder) &mdash; accuracy, latency, and cost per model.
+          </p>
+        </div>
+        <div id="model-comparison-status" class="status" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="status-text">Loading model comparison&hellip;</span>
+        </div>
+        <div class="table-scroll">
+          <table id="model-comparison-table" class="model-comparison-table" hidden>
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">Provider</th>
+                <th scope="col">MAE</th>
+                <th scope="col">Omitted</th>
+                <th scope="col">Skip agreement</th>
+                <th scope="col">Failures</th>
+                <th scope="col">Mean latency</th>
+                <th scope="col">p95 latency</th>
+                <th scope="col">Est. cost</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
     </main>
 
     <footer class="site-footer">
